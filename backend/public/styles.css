@@ -1,0 +1,1636 @@
+/* Reset default browser styles and define global box-sizing */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Define design system: colors, spacing, typography, and shadows */
+    :root {
+      /* Color palette for alerts, status, and UI elements */
+      --green:        #1D9E75;        /* Primary brand green */
+      --green-light:  #E1F5EE;        /* Light green background */
+      --green-mid:    #9FE1CB;        /* Medium green for borders */
+      --green-dark:   #085041;        /* Dark green text */
+      --green-700:    #0F6E56;        /* Alternative green shade */
+      --blue:         #378ADD;        /* Secondary blue color */
+      --blue-light:   #E6F1FB;        /* Light blue background */
+      --blue-dark:    #0C447C;        /* Dark blue text */
+      --amber:        #EF9F27;        /* Warning/caution color */
+      --red:          #E24B4A;        /* Error/danger color */
+      --bg:           #F8FAF9;        /* Page background */
+      --surface:      #FFFFFF;        /* Card/container background */
+      --surface-2:    #F2F7F5;        /* Secondary surface (hover states) */
+      --border:       rgba(0,0,0,0.08);  /* Light border color */
+      --border-md:    rgba(0,0,0,0.14);  /* Medium border color */
+      --text:         #1A2620;        /* Primary text color */
+      --text-2:       #4D6B60;        /* Secondary text (muted) */
+      --text-3:       #8AA89E;        /* Tertiary text (hints/disabled) */
+      /* Border radius for consistent roundness */
+      --radius-sm:    6px;
+      --radius-md:    10px;
+      --radius-lg:    14px;
+      --radius-xl:    20px;
+      /* Layout dimensions */
+      --nav-h:        58px;           /* Navigation bar height */
+      --sidebar-w:    230px;          /* Admin sidebar width */
+      /* Shadow depths for elevation */
+      --shadow-sm:    0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+      --shadow-md:    0 4px 12px rgba(0,0,0,0.08);
+      /* Font families */
+      --font:         'DM Sans', system-ui, sans-serif;
+      --serif:        'Instrument Serif', Georgia, serif;
+      --ease:         cubic-bezier(0.22, 1, 0.36, 1);
+      --dur:          0.22s;
+      --dur-slow:     0.38s;
+    }
+
+    /* Global body styles: typography, colors, and font rendering */
+    html, body {
+      height: 100%;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Remove default link styles; use color inheritance */
+    a { color: inherit; text-decoration: none; }
+    /* Ensure buttons inherit font and show cursor */
+    button { font-family: var(--font); cursor: pointer; }
+    /* Apply consistent font to form inputs */
+    input, select, textarea { font-family: var(--font); }
+
+    /* Main app container: fills viewport with flex column layout */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Top navigation bar: logo, view switcher, auth buttons */
+    .navbar {
+      height: var(--nav-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 10px;
+      flex-shrink: 0;  /* Prevent navbar from shrinking */
+      z-index: 100;
+      min-width: 0;
+    }
+
+    /* Logo area with icon and brand name */
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    /* Brand icon container */
+    .nav-brand-icon {
+      width: 34px; height: 34px;
+      background: var(--green-light);
+      border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+      transition: transform var(--dur) var(--ease);
+    }
+    .nav-brand:hover .nav-brand-icon { transform: rotate(-8deg) scale(1.05); }
+    /* Icon style inside brand icon */
+    .nav-brand-icon i { font-size: 19px; color: var(--green); }
+    /* Container for brand name and subtitle */
+    .nav-brand-text { line-height: 1.2; }
+    /* Main brand name */
+    .nav-brand-name {
+      font-family: var(--serif);
+      font-size: 17px;
+      color: var(--text);
+      display: block;
+    }
+    /* Subtitle text below brand name */
+    .nav-brand-sub {
+      font-size: 10px;
+      color: var(--text-3);
+      letter-spacing: 0.02em;
+      display: block;
+      max-width: 220px;
+      line-height: 1.25;
+      white-space: normal;
+    }
+
+    /* Flexible spacer to push nav-auth to the right */
+    .nav-spacer { flex: 1; }
+
+    /* Navigation tabs for Home, Pharmacies, Medicines, Inquiries */
+    .nav-tabs {
+      display: flex;
+      gap: 2px;
+      overflow-x: auto;
+      min-width: 0;
+    }
+    .nav-tabs::-webkit-scrollbar { display: none; }
+    /* Individual tab button */
+    .nav-tab {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 13px;
+      border-radius: var(--radius-md);
+      border: none;
+      background: transparent;
+      font-size: 13px;
+      color: var(--text-2);
+      cursor: pointer;
+      transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+    }
+    /* Icon within tab */
+    .nav-tab i { font-size: 16px; }
+    /* Hover state for tabs */
+    .nav-tab:hover { background: var(--surface-2); color: var(--text); }
+    /* Active tab styling */
+    .nav-tab.active {
+      background: var(--green-light);
+      color: var(--green-700);
+      font-weight: 500;
+    }
+
+    /* Auth area: Login/Signup buttons */
+    .nav-auth { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+    .nav-user { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); }
+    .nav-user-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--green-light);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: var(--green-700);
+    }
+    .nav-user-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+
+    /* Base button styles */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 15px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-md);
+      background: var(--surface);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      cursor: pointer;
+      transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }
+    /* Button hover and active states */
+    .btn:hover { background: var(--surface-2); transform: translateY(-1px); }
+    .btn:active { transform: scale(0.98); }
+    /* Icon style in buttons */
+    .btn i { font-size: 15px; }
+
+    /* Primary button: green background */
+    .btn-primary {
+      background: var(--green);
+      color: #fff;
+      border-color: var(--green);
+    }
+    .btn-primary:hover { background: var(--green-700); border-color: var(--green-700); }
+
+    /* Ghost button: transparent with hover fill */
+    .btn-ghost {
+      border-color: transparent;
+      background: transparent;
+    }
+    .btn-ghost:hover { background: var(--surface-2); }
+
+    /* Button size variants */
+    .btn-sm { padding: 5px 11px; font-size: 12px; }
+    .btn-sm i { font-size: 14px; }
+    .btn-xs { padding: 3px 8px; font-size: 11px; }
+    .btn-xs i { font-size: 13px; }
+    .btn-lg { padding: 10px 20px; font-size: 14px; }
+    /* Full-width button */
+    .btn-full { width: 100%; justify-content: center; }
+    /* Danger/delete button: red styling */
+    .btn-danger { background: #FEF2F2; color: var(--red); border-color: rgba(226,75,74,0.2); }
+    .btn-danger:hover { background: #FEE2E2; }
+
+    /* Top-level view pages: Guest/User, Auth, Admin */
+    .view {
+      display: none;  /* Hidden by default */
+      flex: 1;
+      overflow: hidden;
+      flex-direction: column;
+      min-height: 0;
+    }
+    /* Show active view */
+    .view.active { display: flex; }
+
+    /* Auth view: allow scroll when signup form is taller than viewport */
+    #view-auth.active {
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* Small status badge/pill for status indicators */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+    /* Badge color variants */
+    .badge-green  { background: #DCFCE7; color: #166534; }
+    .badge-amber  { background: #FEF9C3; color: #854d0e; }
+    .badge-red    { background: #FEE2E2; color: #991b1b; }
+    .badge-blue   { background: var(--blue-light); color: var(--blue-dark); }
+    .badge-gray   { background: #F3F4F6; color: #374151; }
+
+    /* Card container: white box with border */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+    }
+    /* Card padding variant */
+    .card-p { padding: 20px; }
+    /* Card header with title and optional action button */
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    /* Card title with icon */
+    .card-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    /* Icon styling in card title */
+    .card-title i { font-size: 17px; color: var(--green); }
+
+    /* Form styling: labels and inputs */
+    .form-group { margin-bottom: 14px; }
+    /* Form label styling (direct children only — not checkbox rows inside lists) */
+    .form-group > label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-2);
+      margin-bottom: 5px;
+    }
+    /* Form input, select, textarea styling */
+    .form-group input:not([type="checkbox"]):not([type="radio"]),
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 8px 11px;
+      border: 1px solid var(--border-md);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      background: var(--surface);
+      color: var(--text);
+      transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }
+    /* Focus state: highlight border in green with glow */
+    .form-group input:not([type="checkbox"]):not([type="radio"]):focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(29,158,117,0.1);
+    }
+    /* Textarea specific sizing */
+    .form-group textarea { min-height: 90px; resize: vertical; }
+
+    /* Section header: title with icon and action button */
+    .section-hd {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    /* Heading for content sections */
+    .section-hd h2 {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    /* Icon styling in section heading */
+    .section-hd h2 i { font-size: 18px; color: var(--green); }
+
+    /* Scrollable content container with custom scrollbar */
+    .scroll-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 22px 24px;
+    }
+    /* Custom scrollbar styling */
+    .scroll-area::-webkit-scrollbar { width: 5px; }
+    .scroll-area::-webkit-scrollbar-track { background: transparent; }
+    .scroll-area::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 4px; }
+
+    /* Grid layout helpers for responsive columns */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+    /* Auto-fill grid: responsive columns (min 200px) */
+    .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+
+    /* ════════════════════════════════════════════════════════════
+       GUEST / USER LANDING PAGE VIEW
+    ════════════════════════════════════════════════════════════ */
+
+    /* Large hero banner: welcome section with gradient background */
+    .hero {
+      background: linear-gradient(135deg, #E8F8F2 0%, #EEF5FF 100%);
+      border-radius: var(--radius-xl);
+      padding: 36px 32px;
+      margin-bottom: 24px;
+      display: flex;
+      gap: 40px;
+      align-items: center;
+      animation: fadeUp var(--dur-slow) var(--ease);
+    }
+    /* Hero left side: headline and description */
+    .hero-body { flex: 1; }
+    /* Large hero headline */
+    .hero-body h1 {
+      font-family: var(--serif);
+      font-size: 30px;
+      font-weight: 400;
+      color: var(--green-dark);
+      line-height: 1.25;
+      margin-bottom: 10px;
+    }
+    /* Italicized emphasis in headline */
+    .hero-body h1 em { font-style: italic; color: var(--green); }
+    /* Hero description paragraph */
+    .hero-body p {
+      font-size: 14px;
+      color: var(--text-2);
+      max-width: 400px;
+      line-height: 1.65;
+      margin-bottom: 20px;
+    }
+    /* CTA buttons container */
+    .hero-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+    .scope-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+    .scope-pill {
+      font-size: 11px; font-weight: 500;
+      background: var(--surface); border: 1px solid var(--border-md);
+      border-radius: 999px; padding: 4px 10px; color: var(--text-2);
+    }
+    .scope-banner {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 12px 16px;
+      margin-bottom: 20px;
+    }
+    .scope-banner-title {
+      font-size: 13px; font-weight: 600; margin-bottom: 4px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .scope-banner-title i { color: var(--green); }
+    .scope-banner p { font-size: 13px; color: var(--text-2); margin: 0; line-height: 1.5; }
+    .geofence-params {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    .geofence-params-title {
+      font-size: 13px; font-weight: 600; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .geofence-params-title i { color: var(--green); }
+    .geofence-params-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 14px;
+      font-size: 12px;
+      color: var(--text-2);
+    }
+
+    /* Hero decorative map showing geofence visualization */
+    .hero-map {
+      flex-shrink: 0;
+      width: 220px;
+      height: 170px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      position: relative;
+      box-shadow: var(--shadow-md);
+      animation: fadeUp 0.5s var(--ease) 0.08s both;
+    }
+    /* SVG map fills container */
+    .hero-map svg { width: 100%; height: 100%; }
+    /* Label badge on map (geofence distance) */
+    .hero-map-label {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 9px;
+      font-size: 10px;
+      color: var(--text-2);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Medicine product card: clickable card showing medicine info */
+    .med-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
+    }
+    /* Hover state: lift card, highlight border */
+    .med-card:hover {
+      border-color: var(--green-mid);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-3px);
+    }
+    /* Top section: icon and status badge */
+    .med-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    /* Medicine icon container */
+    .med-icon {
+      width: 38px; height: 38px;
+      background: var(--green-light);
+      border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+    }
+    /* Icon inside medicine card */
+    .med-icon i { font-size: 20px; color: var(--green); }
+    /* Medicine name */
+    .med-name { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 2px; }
+    /* Medicine type/category */
+    .med-type { font-size: 12px; color: var(--text-3); }
+    /* Pharmacy location info */
+    .med-pharmacy {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 11px; color: var(--text-3);
+      margin-top: 9px;
+      padding-top: 9px;
+      border-top: 1px solid var(--border);
+    }
+    /* Icon in pharmacy info */
+    .med-pharmacy i { font-size: 13px; }
+
+    /* Tips/advice panel: medicine safety information */
+    .tips-panel {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+    }
+    /* Tips panel heading */
+    .tips-panel h3 {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    /* Icon in tips heading */
+    .tips-panel h3 i { font-size: 16px; color: var(--blue); }
+    /* Individual tip row with bullet point */
+    .tip-row { display: flex; gap: 9px; margin-bottom: 10px; }
+    /* Bullet point dot before tip text */
+    .tip-dot {
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 6px;
+    }
+    /* Tip description text */
+    .tip-text { font-size: 12px; color: var(--text-2); line-height: 1.55; }
+
+    /* Pharmacy geofence view: side-by-side list and map */
+    .geo-layout { display: grid; grid-template-columns: 290px 1fr; gap: 18px; }
+
+    /* Notice banner: explains geofence radius */
+    .geofence-notice {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--green-light);
+      border: 1px solid rgba(29,158,117,0.18);
+      border-radius: var(--radius-md);
+      padding: 8px 13px;
+      font-size: 12px;
+      color: var(--green-700);
+      margin-bottom: 12px;
+    }
+    /* Icon in geofence notice */
+    .geofence-notice i { font-size: 15px; }
+
+    /* List container for pharmacy items */
+    .pharmacy-list { display: flex; flex-direction: column; gap: 8px; }
+    /* Individual pharmacy list item: clickable, selectable */
+    .pharmacy-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 13px 15px;
+      cursor: pointer;
+      transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }
+    /* Hover state for pharmacy item */
+    .pharmacy-item:hover {
+      border-color: var(--green-mid);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-sm);
+    }
+    /* Active (selected) pharmacy item */
+    .pharmacy-item.active {
+      border-color: var(--green);
+      background: var(--green-light);
+    }
+    /* Pharmacy name in list item */
+    .pharm-name { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+    /* Row for distance and status badge */
+    .pharm-row { display: flex; align-items: center; gap: 8px; }
+    /* Distance indicator with icon */
+    .pharm-dist {
+      display: flex; align-items: center; gap: 3px;
+      font-size: 11px; color: var(--green); font-weight: 500;
+    }
+    /* Icon in distance */
+    .pharm-dist i { font-size: 13px; }
+    /* Pharmacy address text */
+    .pharm-addr { font-size: 11px; color: var(--text-3); margin-top: 5px; }
+
+    /* Map container: shows pharmacy locations and geofence */
+    .geo-map-wrap {
+      background: #E8F5EE;
+      border: 1px solid rgba(29,158,117,0.2);
+      border-radius: var(--radius-lg);
+      position: relative;
+      overflow: hidden;
+      min-height: 400px;
+      display: flex;
+    }
+    /* Legacy inline SVG map only (direct child — not Leaflet attribution icons) */
+    .geo-map-wrap > svg { width: 100%; height: 100%; }
+    /* Leaflet attribution flag must stay tiny (global svg rules break it) */
+    .leaflet-control-attribution .leaflet-attribution-flag {
+      width: 12px;
+      height: 8px;
+      vertical-align: baseline;
+    }
+    .leaflet-control-attribution {
+      font-size: 10px;
+      line-height: 1.3;
+      max-width: calc(100% - 24px);
+    }
+    /* Leaflet map panes */
+    #guest-leaflet-map,
+    #admin-leaflet-map {
+      width: 100%;
+      height: 100%;
+      min-height: 400px;
+      border-radius: var(--radius-lg);
+      z-index: 0;
+    }
+    .geo-map-wrap:has(#guest-leaflet-map),
+    .geo-map-wrap:has(#admin-leaflet-map) {
+      display: block;
+    }
+    /* Location label overlay on map */
+    .map-overlay {
+      position: absolute; top: 12px; left: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 6px 11px;
+      font-size: 12px;
+      color: var(--text-2);
+      display: flex; align-items: center; gap: 5px;
+    }
+    /* Icon in map overlay */
+    .map-overlay i { font-size: 14px; color: var(--green); }
+
+    /* Full-width directions button */
+    .directions-btn { width: 100%; margin-top: 12px; }
+
+    /* Inquiry submission and history layout: form on left, history on right */
+    .inquiry-layout { display: grid; grid-template-columns: 1fr 320px; gap: 18px; }
+
+    /* Inquiry item in history list */
+    .inq-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 11px 13px;
+      margin-bottom: 8px;
+      transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }
+    .inq-item:hover { border-color: var(--green-mid); box-shadow: var(--shadow-sm); }
+    /* Top of inquiry item: medicine name and status */
+    .inq-item-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+    /* Medicine name in inquiry */
+    .inq-med { font-size: 13px; font-weight: 500; color: var(--text); }
+    /* Metadata row: pharmacy and time */
+    .inq-meta { display: flex; align-items: center; gap: 7px; }
+    /* Time when inquiry was sent */
+    .inq-time { font-size: 11px; color: var(--text-3); }
+    /* Reply text from pharmacy */
+    .inq-reply { font-size: 12px; color: var(--text-2); margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border); }
+
+    /* ════════════════════════════════════════════════════════════
+       AUTHENTICATION VIEW: Login/Sign Up Forms
+    ════════════════════════════════════════════════════════════ */
+
+    /* Auth page layout: center auth card on page */
+    .auth-wrap {
+      flex: 1 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      background: var(--bg);
+      min-height: calc(100vh - var(--nav-h));
+      box-sizing: border-box;
+    }
+    /* Auth card container: form box */
+    .auth-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 36px 32px;
+      width: 380px;
+      box-shadow: var(--shadow-md);
+    }
+    /* Auth page header: logo and title */
+    .auth-header { text-align: center; margin-bottom: 26px; }
+    /* Logo icon container in auth header */
+    .auth-logo-icon {
+      width: 52px; height: 52px;
+      background: var(--green-light);
+      border-radius: var(--radius-lg);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 12px;
+    }
+    /* Icon in auth logo */
+    .auth-logo-icon i { font-size: 28px; color: var(--green); }
+    /* Auth page title */
+    .auth-title {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 400;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    /* Auth page subtitle */
+    .auth-sub { font-size: 13px; color: var(--text-3); }
+
+    /* Segmented control: toggle between login/signup modes */
+    .auth-seg {
+      display: flex;
+      gap: 3px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 3px;
+      margin-bottom: 22px;
+    }
+    /* Individual segment button */
+    .auth-seg-btn {
+      flex: 1;
+      padding: 7px 12px;
+      border: none;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-2);
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s;
+    }
+    /* Active segment button */
+    .auth-seg-btn.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Auth form footer: link back to guest */
+    .auth-footer {
+      text-align: center;
+      margin-top: 18px;
+      font-size: 12px;
+      color: var(--text-3);
+    }
+    /* Link styling in auth footer */
+    .auth-footer a {
+      color: var(--green);
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       ADMIN VIEW: Dashboard, Management Sections
+    ════════════════════════════════════════════════════════════ */
+
+    /* Admin main layout: sidebar + content area */
+    .admin-shell {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── ADMIN SIDEBAR ── */
+    /* Left navigation sidebar for admin sections */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+      padding: 16px 10px;
+    }
+    /* Custom scrollbar for sidebar */
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* Sidebar section grouping */
+    .sidebar-section { margin-bottom: 22px; }
+    /* Label for sidebar section */
+    .sidebar-label {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding: 0 10px;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    /* Individual sidebar menu item */
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      color: var(--text-2);
+      cursor: pointer;
+      transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur) var(--ease);
+      margin-bottom: 1px;
+    }
+    /* Icon in sidebar item */
+    .sidebar-item i { font-size: 16px; }
+    /* Hover state for sidebar item */
+    .sidebar-item:hover { background: var(--surface-2); color: var(--text); transform: translateX(3px); }
+    /* Active sidebar item */
+    .sidebar-item.active {
+      background: var(--green-light);
+      color: var(--green-700);
+      font-weight: 500;
+    }
+    /* Badge count on sidebar item (e.g., pending inquiries) */
+    .sidebar-item .badge-count {
+      margin-left: auto;
+      background: var(--green);
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+    /* Bottom section: logout button */
+    .sidebar-bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+
+    /* ── ADMIN CONTENT AREA ── */
+    /* Main admin content: scrollable section with sections */
+    .admin-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      background: var(--bg);
+    }
+    /* Custom scrollbar */
+    .admin-content::-webkit-scrollbar { width: 5px; }
+    .admin-content::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 4px; }
+
+    /* Admin section containers: hide all, show active */
+    .admin-section { display: none; }
+    .admin-section.active { display: block; }
+
+    /* ── STAT CARDS ── */
+    /* KPI card: shows key metrics */
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 18px;
+      transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-sm);
+      border-color: var(--green-mid);
+    }
+    /* Label for stat card (with icon) */
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-2);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 8px;
+    }
+    /* Icon in stat label */
+    .stat-label i { font-size: 15px; color: var(--green); }
+    /* Large number display in stat card */
+    .stat-value { font-size: 24px; font-weight: 600; color: var(--text); line-height: 1.2; }
+    /* Stat delta/change indicator (up/down) */
+    .stat-delta { font-size: 11px; color: var(--text-3); margin-top: 3px; }
+    /* Positive change (green) */
+    .stat-delta.up { color: #16a34a; }
+    /* Warning change (amber) */
+    .stat-delta.warn { color: var(--amber); }
+
+    /* ── ACTIVITY FEED ── */
+    /* Activity entry: describes admin actions */
+    .activity-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    /* Last activity item without border */
+    .activity-item:last-child { border-bottom: none; }
+    /* Icon container for activity */
+    .activity-icon {
+      width: 32px; height: 32px;
+      border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    /* Icon inside activity icon container */
+    .activity-icon i { font-size: 16px; }
+    /* Activity description text */
+    .activity-text { flex: 1; font-size: 13px; color: var(--text); line-height: 1.4; }
+    /* Timestamp for activity */
+    .activity-time { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+    /* ── DATA TABLES ── */
+    /* Table for displaying data grids */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    /* Table header */
+    .data-table th {
+      text-align: left;
+      padding: 9px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-3);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    /* Table cell */
+    .data-table td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      vertical-align: middle;
+    }
+    /* Last table row without bottom border */
+    .data-table tr:last-child td { border-bottom: none; }
+    /* Hover row highlight */
+    .data-table tbody tr { transition: background var(--dur) var(--ease); }
+    .data-table tbody tr:hover td { background: var(--surface-2); }
+
+    /* ── STOCK DISPLAY BAR ── */
+    /* Row container for stock quantity and bar */
+    .stock-row { display: flex; align-items: center; gap: 9px; }
+    /* Quantity number display */
+    .stock-qty-num { min-width: 36px; font-size: 13px; font-weight: 500; }
+    /* Background bar for stock level */
+    .stock-bar { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    /* Colored fill inside stock bar */
+    .stock-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+    /* Green fill: high stock */
+    .fill-high { background: var(--green); }
+    /* Amber fill: medium stock */
+    .fill-mid  { background: var(--amber); }
+    /* Red fill: low/out of stock */
+    .fill-low  { background: var(--red); }
+
+    /* ── POS SYSTEM LAYOUT ── */
+    /* POS layout: products grid + cart sidebar */
+    .pos-layout { display: grid; grid-template-columns: 1fr 330px; gap: 20px; }
+
+    /* Product grid for POS */
+    .pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px; }
+    /* Individual product card in POS */
+    .pos-product {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 13px 14px;
+      cursor: pointer;
+      transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
+    }
+    /* Hover state for product */
+    .pos-product:hover { border-color: var(--green); box-shadow: var(--shadow-sm); transform: translateY(-2px); }
+    /* Out of stock product: grayed out */
+    .pos-product.out { opacity: 0.45; cursor: not-allowed; }
+    /* Product name in POS grid */
+    .pos-prod-name { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 3px; }
+    /* Product price in green */
+    .pos-prod-price { font-size: 15px; font-weight: 600; color: var(--green); }
+    /* Stock quantity display */
+    .pos-prod-stock { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+    /* Out of stock text: red */
+    .pos-prod-stock.empty { color: var(--red); }
+
+    /* ── POS CART ── */
+    /* Shopping cart sidebar: sticky, shows items and total */
+    .pos-cart {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      position: sticky;
+      top: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    /* Cart header title */
+    .cart-header { font-size: 14px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 6px; }
+    /* Icon in cart header */
+    .cart-header i { font-size: 18px; color: var(--green); }
+
+    /* Cart items container */
+    .cart-items-list { flex: 1; min-height: 80px; }
+    /* Empty state message */
+    .cart-empty { font-size: 12px; color: var(--text-3); text-align: center; padding: 20px 0; }
+    /* Individual item in cart */
+    .cart-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    /* Last cart item without border */
+    .cart-item:last-child { border-bottom: none; }
+    /* Item name in cart */
+    .cart-item-name { flex: 1; font-size: 13px; color: var(--text); }
+    /* Quantity control buttons */
+    .qty-ctrl { display: flex; align-items: center; gap: 4px; }
+    /* Qty +/- button */
+    .qty-btn {
+      width: 24px; height: 24px;
+      border: 1px solid var(--border-md);
+      background: transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 15px;
+      color: var(--text);
+      display: flex; align-items: center; justify-content: center;
+      line-height: 1;
+      transition: background 0.12s;
+    }
+    /* Qty button hover */
+    .qty-btn:hover { background: var(--surface-2); }
+    /* Quantity number display */
+    .qty-num { font-size: 13px; min-width: 22px; text-align: center; }
+    /* Item price in cart */
+    .cart-item-price { font-size: 13px; font-weight: 500; min-width: 55px; text-align: right; color: var(--text); }
+
+    /* ── CART TOTALS ── */
+    /* Totals section: subtotal and total */
+    .cart-totals {
+      background: var(--green-light);
+      border-radius: var(--radius-md);
+      padding: 13px 14px;
+    }
+    /* Individual total row (subtotal, tax, etc) */
+    .cart-total-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+    /* Grand total row (bold, large) */
+    .cart-total-main { display: flex; justify-content: space-between; font-size: 16px; font-weight: 600; color: var(--green-700); border-top: 1px solid rgba(29,158,117,0.2); padding-top: 8px; margin-top: 4px; }
+
+    .pos-cart {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      position: sticky;
+      top: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .cart-header { font-size: 14px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 6px; }
+    .cart-header i { font-size: 18px; color: var(--green); }
+
+    .cart-items-list { flex: 1; min-height: 80px; }
+    .cart-empty { font-size: 12px; color: var(--text-3); text-align: center; padding: 20px 0; }
+    .cart-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .cart-item:last-child { border-bottom: none; }
+    .cart-item-name { flex: 1; font-size: 13px; color: var(--text); }
+    .qty-ctrl { display: flex; align-items: center; gap: 4px; }
+    .qty-btn {
+      width: 24px; height: 24px;
+      border: 1px solid var(--border-md);
+      background: transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 15px;
+      color: var(--text);
+      display: flex; align-items: center; justify-content: center;
+      line-height: 1;
+      transition: background 0.12s;
+    }
+    .qty-btn:hover { background: var(--surface-2); }
+    .qty-num { font-size: 13px; min-width: 22px; text-align: center; }
+    .cart-item-price { font-size: 13px; font-weight: 500; min-width: 55px; text-align: right; color: var(--text); }
+
+    .cart-totals {
+      background: var(--green-light);
+      border-radius: var(--radius-md);
+      padding: 13px 14px;
+    }
+    .cart-total-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+    .cart-total-main { display: flex; justify-content: space-between; font-size: 16px; font-weight: 600; color: var(--green-700); border-top: 1px solid rgba(29,158,117,0.2); padding-top: 8px; margin-top: 4px; }
+
+    /* Pharmacy profile card for admin management */
+    .pharm-profile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      margin-bottom: 12px;
+    }
+    /* Top row: pharmacy info and action buttons */
+    .pharm-profile-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    /* Left side: avatar and name */
+    .pharm-profile-left { display: flex; align-items: center; gap: 12px; }
+    /* Pharmacy avatar icon container */
+    .pharm-profile-avatar {
+      width: 44px; height: 44px;
+      border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+    }
+    /* Icon in pharmacy avatar */
+    .pharm-profile-avatar i { font-size: 22px; }
+    /* Pharmacy name */
+    .pharm-profile-name { font-size: 15px; font-weight: 500; color: var(--text); margin-bottom: 2px; }
+    /* Pharmacy location */
+    .pharm-profile-loc { font-size: 12px; color: var(--text-3); }
+    /* Metadata grid: owner, hours, geofence, etc */
+    .pharm-profile-meta { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; font-size: 12px; }
+    /* Individual metadata item */
+    .pharm-meta-item { color: var(--text-2); }
+    /* Metadata value (bold) */
+    .pharm-meta-item span { color: var(--text); font-weight: 500; }
+
+    /* ── GEOFENCE ADMIN ── */
+    /* Geofence management: map and list layout */
+    .geo-admin-layout { display: grid; grid-template-columns: 1fr 260px; gap: 18px; }
+    /* Individual geofence item in list */
+    .fence-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .fence-item.active {
+      border-color: rgba(29,158,117,0.45);
+      background: rgba(29,158,117,0.04);
+    }
+    /* Color dot for geofence (indicates zone) */
+    .fence-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+    /* Geofence info container */
+    .fence-info { flex: 1; }
+    /* Geofence name */
+    .fence-name { font-size: 13px; font-weight: 500; color: var(--text); }
+    /* Geofence metadata (pharmacy count, radius) */
+    .fence-meta { font-size: 11px; color: var(--text-3); }
+    /* Action buttons for geofence */
+    .fence-actions { display: flex; gap: 4px; }
+    .geofence-pharmacy-checks {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 180px;
+      overflow-y: auto;
+      padding: 2px;
+    }
+    .geofence-pharmacy-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .geofence-pharmacy-option:hover {
+      border-color: rgba(29,158,117,0.35);
+      background: rgba(29,158,117,0.03);
+    }
+    .geofence-pharmacy-option:has(input:checked) {
+      border-color: rgba(29,158,117,0.45);
+      background: rgba(29,158,117,0.06);
+    }
+    .geofence-pharmacy-option input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      min-width: 16px;
+      margin: 0;
+      padding: 0;
+      accent-color: var(--green);
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .geofence-pharmacy-name {
+      flex: 1;
+      line-height: 1.35;
+    }
+
+    /* ── SETTINGS GRID ── */
+    /* 2-column grid of settings/configuration cards */
+    .settings-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }
+    /* Individual settings card: clickable to navigate */
+    .setting-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      cursor: pointer;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    /* Hover state for settings card */
+    .setting-card:hover { border-color: var(--green-mid); box-shadow: var(--shadow-sm); }
+    /* Icon container for settings */
+    .setting-icon {
+      width: 40px; height: 40px;
+      background: var(--green-light);
+      border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    /* Icon in settings card */
+    .setting-icon i { font-size: 21px; color: var(--green); }
+    /* Settings title */
+    .setting-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+    /* Settings description */
+    .setting-desc { font-size: 12px; color: var(--text-2); line-height: 1.45; }
+
+    /* ── BACKUP & DATA EXPORT ── */
+    /* Backup file item in list */
+    .backup-file {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 11px 14px;
+      background: var(--surface-2);
+      border-radius: var(--radius-md);
+      margin-bottom: 8px;
+    }
+    /* File type icon */
+    .backup-file i { font-size: 22px; color: var(--green); }
+    /* Backup file info container */
+    .backup-file-info { flex: 1; }
+    /* Backup filename */
+    .backup-file-name { font-size: 13px; font-weight: 500; color: var(--text); }
+    /* Backup file metadata (date, size, type) */
+    .backup-file-meta { font-size: 11px; color: var(--text-3); }
+
+    /* ── DIVIDER ── */
+    /* Horizontal divider line */
+    .divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+    /* ════════════════════════════════════════════════════════════
+       UTILITY CLASSES & ANIMATIONS
+    ════════════════════════════════════════════════════════════ */
+
+    /* Hide element completely */
+    .hidden { display: none !important; }
+    /* Margin top utilities */
+    .mt-4  { margin-top: 4px; }
+    .mt-8  { margin-top: 8px; }
+    .mt-12 { margin-top: 12px; }
+    .mt-16 { margin-top: 16px; }
+    /* Margin bottom utilities */
+    .mb-8  { margin-bottom: 8px; }
+    .mb-12 { margin-bottom: 12px; }
+    .mb-16 { margin-bottom: 16px; }
+    /* Font size utilities */
+    .text-sm  { font-size: 12px; }
+    .text-xs  { font-size: 11px; }
+    /* Text color utilities */
+    .text-muted { color: var(--text-2); }
+    .text-hint  { color: var(--text-3); }
+    .text-green { color: var(--green); }
+    /* Font weight utility */
+    .fw-500 { font-weight: 500; }
+
+    /* Motion */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes popIn {
+      from { opacity: 0; transform: translateY(8px) scale(0.98); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes bootFade {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes bootNav {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    html.is-booting .app { opacity: 0; visibility: hidden; }
+    html.is-ready .app { animation: bootFade 0.4s var(--ease) both; visibility: visible; }
+    html.is-ready .navbar { animation: bootNav 0.35s var(--ease) both; }
+    html.is-ready .scroll-area,
+    html.is-ready .admin-shell,
+    html.is-ready .auth-wrap {
+      animation: fadeUp 0.4s var(--ease) 0.04s both;
+    }
+
+    .app-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      background: #F8FAF9;
+      transition: opacity 0.28s var(--ease), visibility 0.28s;
+    }
+    html.is-ready .app-loader {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .app-loader-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: #E1F5EE;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .app-loader-plus {
+      width: 16px;
+      height: 16px;
+      position: relative;
+    }
+    .app-loader-plus::before,
+    .app-loader-plus::after {
+      content: "";
+      position: absolute;
+      background: #1D9E75;
+      border-radius: 1px;
+    }
+    .app-loader-plus::before { left: 6px; top: 0; width: 4px; height: 16px; }
+    .app-loader-plus::after { left: 0; top: 6px; width: 16px; height: 4px; }
+    .app-loader-name {
+      font-family: var(--serif);
+      font-size: 20px;
+      color: #1A2620;
+    }
+    .app-loader-bar {
+      width: 96px;
+      height: 2px;
+      background: rgba(29,158,117,0.15);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .app-loader-bar::after {
+      content: "";
+      display: block;
+      width: 40%;
+      height: 100%;
+      background: #1D9E75;
+      animation: loaderSweep 0.9s var(--ease) infinite;
+    }
+    @keyframes loaderSweep {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(280%); }
+    }
+
+    @keyframes tabSlideIn {
+      from { opacity: 0; transform: translateX(24px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes tabSlideInBack {
+      from { opacity: 0; transform: translateX(-24px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .tab-panel.tab-in-forward {
+      animation: tabSlideIn 0.38s var(--ease);
+    }
+    .tab-panel.tab-in-back {
+      animation: tabSlideInBack 0.38s var(--ease);
+    }
+
+    .tab-panel.is-entering,
+    [id^="tab-content-"]:not(.hidden).is-entering {
+      animation: fadeUp 0.32s var(--ease);
+    }
+    .view.is-entering { animation: fadeIn 0.36s var(--ease); }
+    .admin-section.is-entering { animation: fadeIn 0.32s var(--ease); }
+    .admin-section.active:not(.is-entering),
+    .view.active:not(.is-entering) { animation: fadeIn var(--dur-slow) var(--ease); }
+
+    .nav-tab {
+      position: relative;
+    }
+    .nav-tab.active {
+      transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+    }
+
+    .btn:active,
+    .nav-tab:active,
+    .sidebar-item:active,
+    .auth-seg-btn:active,
+    .chatbot-toggle:active,
+    .pharmacy-item:active,
+    .med-card:active,
+    .pos-product:active {
+      transform: scale(0.98);
+    }
+
+    .card {
+      transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }
+    .badge { transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+
+    .med-card,
+    .pos-product {
+      animation: fadeUp 0.36s var(--ease) both;
+    }
+    .med-card:nth-child(1), .pos-product:nth-child(1) { animation-delay: 0.02s; }
+    .med-card:nth-child(2), .pos-product:nth-child(2) { animation-delay: 0.05s; }
+    .med-card:nth-child(3), .pos-product:nth-child(3) { animation-delay: 0.08s; }
+    .med-card:nth-child(4), .pos-product:nth-child(4) { animation-delay: 0.11s; }
+    .med-card:nth-child(5), .pos-product:nth-child(5) { animation-delay: 0.14s; }
+    .med-card:nth-child(n+6), .pos-product:nth-child(n+6) { animation-delay: 0.17s; }
+    .pharmacy-item { animation: fadeUp 0.3s var(--ease) both; }
+    .stat-card { animation: fadeUp 0.36s var(--ease) both; }
+    .auth-card { animation: popIn 0.4s var(--ease); }
+    .stock-fill { transition: width 0.45s var(--ease); }
+    .auth-login-form.is-entering,
+    .auth-signup-form.is-entering,
+    #auth-login-form.is-entering,
+    #auth-signup-form.is-entering {
+      animation: fadeUp 0.28s var(--ease);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html.is-booting .app { opacity: 1; }
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .app-loader-bar::after { animation: none; width: 100%; }
+    }
+
+    /* ── Help assistant shell (toggle only) ── */
+    .chatbot {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 400;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+    }
+    .chatbot-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: 11px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background var(--dur) var(--ease), transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }
+    .chatbot-toggle:hover {
+      background: var(--green-700);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .chatbot-toggle i { font-size: 18px; }
+    .chatbot.is-open .chatbot-toggle { background: var(--green-700); }
+    .chatbot[hidden] { display: none !important; }
+    .chatbot-panel {
+      width: min(360px, calc(100vw - 32px));
+      height: min(480px, calc(100vh - 120px));
+      max-height: 0;
+      background: var(--surface);
+      border: 1px solid var(--border-md);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateY(10px) scale(0.96);
+      transform-origin: bottom right;
+      transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease), max-height var(--dur) var(--ease), visibility var(--dur);
+    }
+    .chatbot-panel.is-open {
+      max-height: min(480px, calc(100vh - 120px));
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: none;
+    }
+    .chatbot-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      background: var(--surface-2);
+      flex-shrink: 0;
+    }
+    .chatbot-head-actions { display: flex; align-items: center; gap: 6px; }
+    .chatbot-title { font-size: 14px; font-weight: 600; }
+    .chatbot-sub { font-size: 11px; color: var(--text-2); margin-top: 2px; line-height: 1.35; max-width: 220px; }
+    .chatbot-lang {
+      display: flex;
+      gap: 2px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px;
+    }
+    .chatbot-lang-btn {
+      border: none;
+      background: transparent;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: var(--text-2);
+    }
+    .chatbot-lang-btn.is-active {
+      background: var(--green-light);
+      color: var(--green-700);
+    }
+    .chatbot-icon-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-2);
+      padding: 4px;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 2;
+      transition: color var(--dur) var(--ease), transform var(--dur) var(--ease);
+    }
+    .chatbot-icon-btn:hover { color: var(--text); transform: rotate(90deg); }
+    .chatbot-icon-btn i { pointer-events: none; }
+    .chatbot-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--bg);
+    }
+    .chatbot-bubble {
+      max-width: 94%;
+      padding: 9px 12px;
+      border-radius: var(--radius-md);
+      font-size: 12.5px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .chatbot-bubble.bot {
+      align-self: flex-start;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .chatbot-bubble.user {
+      align-self: flex-end;
+      background: var(--green-light);
+      color: var(--green-dark);
+    }
+    .chatbot-choices {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px 12px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      max-height: 168px;
+      overflow-y: auto;
+    }
+    .chatbot-choice {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 8px 10px;
+      font-size: 12px;
+      color: var(--text);
+      text-align: left;
+      line-height: 1.35;
+    }
+    .chatbot-choice:hover {
+      border-color: var(--green-mid);
+      background: var(--green-light);
+    }
+
+    /* ── RESPONSIVE DESIGN ── */
+    /* Mobile/tablet layout adjustments */
+    @media (max-width: 800px) {
+      /* Stack grid layouts vertically on small screens */
+      .geo-layout,
+      .inquiry-layout,
+      .geo-admin-layout,
+      .pos-layout { grid-template-columns: 1fr; }
+      /* Reduce 4-col grid to 2-col on mobile */
+      .grid-4 { grid-template-columns: repeat(2,1fr); }
+      /* Hero layout: stack vertically */
+      .hero { flex-direction: column; gap: 20px; }
+      /* Hero map: full width */
+      .geofence-params-grid { grid-template-columns: 1fr; }
+      .nav-brand-sub { max-width: 160px; }
+      /* Collapse sidebar to icon-only on small screens */
+      .admin-shell .sidebar { width: 48px; }
+      /* Hide text labels in collapsed sidebar */
+      .sidebar-item span { display: none; }
+      .sidebar-label { display: none; }
+    }

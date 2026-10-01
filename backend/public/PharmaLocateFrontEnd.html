@@ -1,0 +1,1031 @@
+<!-- Main HTML document for PharmaLocate pharmacy system -->
+<!DOCTYPE html>
+<html lang="en" class="is-booting">
+<head>
+  <!-- Set character encoding and viewport for responsive design -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PharmaLocate — Web-Based Pharmacy Inquiry System with Geofencing for Real-Time Drug Availability, Sale &amp; Inventory Checking</title>
+
+  <!-- Import Google Fonts for typography (DM Sans & Instrument Serif) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://unpkg.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <noscript>
+    <style>
+      html.is-booting .app { opacity: 1 !important; visibility: visible !important; }
+      .app-loader { display: none !important; }
+    </style>
+  </noscript>
+</head>
+
+<body>
+
+<div id="app-loader" class="app-loader" role="status" aria-live="polite" aria-label="Loading PharmaLocate">
+  <div class="app-loader-mark">
+    <span class="app-loader-plus"></span>
+  </div>
+  <div class="app-loader-name">PharmaLocate</div>
+  <div class="app-loader-bar" aria-hidden="true"></div>
+</div>
+
+<div class="app">
+
+<!-- partials/navbar.html -->
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <!-- Brand -->
+    <div class="nav-brand" onclick="goHome()" style="cursor:pointer" title="Go to home">
+      <div class="nav-brand-icon">
+        <i class="ti ti-first-aid-kit" aria-hidden="true"></i>
+      </div>
+      <div class="nav-brand-text">
+        <span class="nav-brand-name">PharmaLocate</span>
+        <span class="nav-brand-sub">Availability, sale &amp; inventory · geofencing</span>
+      </div>
+    </div>
+
+    <div class="nav-spacer"></div>
+
+    <!-- Nav tabs (guest/user) -->
+    <div class="nav-tabs" id="nav-tabs">
+      <button class="nav-tab active" onclick="switchTab('home')" id="tab-home">
+        <i class="ti ti-home" aria-hidden="true"></i> Home
+      </button>
+      <button class="nav-tab" onclick="switchTab('pharmacies')" id="tab-pharmacies">
+        <i class="ti ti-map-pin" aria-hidden="true"></i> Pharmacies
+      </button>
+      <button class="nav-tab" onclick="switchTab('medicines')" id="tab-medicines">
+        <i class="ti ti-pill" aria-hidden="true"></i> Medicines
+      </button>
+      <button class="nav-tab" onclick="switchTab('inquiries')" id="tab-inquiries">
+        <i class="ti ti-message-question" aria-hidden="true"></i> Inquiries
+      </button>
+    </div>
+
+    <!-- Auth area -->
+    <div class="nav-auth" id="nav-auth">
+      <button class="btn btn-ghost btn-sm" onclick="switchView('auth')">
+        <i class="ti ti-login"></i> Log in
+      </button>
+      <button class="btn btn-primary btn-sm" onclick="switchView('auth')">
+        <i class="ti ti-user-plus"></i> Sign up
+      </button>
+    </div>
+  </nav>
+
+<!-- partials/view-guest.html -->
+  <!-- VIEW: GUEST / USER -->
+  <div class="view active" id="view-guest">
+    <div class="scroll-area">
+
+      <!-- ── HOME TAB ── -->
+      <div id="tab-content-home" class="tab-panel">
+
+        <!-- Hero -->
+        <div class="hero">
+          <div class="hero-body">
+            <h1>Find medicines <em>near you</em>,<br>in real time.</h1>
+            <p>
+              A web-based inquiry system for all users: check real-time drug availability at community pharmacies around Tarlac Provincial Hospital, then get directions. Staff record sales and manage inventory through POS. Pharmacies operating <strong>inside TPH are not included</strong>.
+            </p>
+            <div class="hero-btns">
+              <button class="btn btn-primary btn-lg" onclick="switchTab('pharmacies')">
+                <i class="ti ti-map-2"></i> Find pharmacies
+              </button>
+              <button class="btn btn-lg" onclick="switchTab('medicines')">
+                <i class="ti ti-pill"></i> Browse medicines
+              </button>
+            </div>
+            <div class="scope-pills" aria-label="System scope">
+              <span class="scope-pill">Users (general public)</span>
+              <span class="scope-pill">Availability</span>
+              <span class="scope-pill">Sale &amp; inventory (POS)</span>
+              <span class="scope-pill">Desktop &amp; mobile browsers</span>
+            </div>
+          </div>
+
+          <!-- Mini map decoration -->
+          <div class="hero-map">
+            <svg viewBox="0 0 220 170" xmlns="http://www.w3.org/2000/svg">
+              <rect width="220" height="170" fill="#E8F5EE"/>
+              <!-- roads -->
+              <rect x="0" y="60" width="220" height="12" fill="#9FE1CB"/>
+              <rect x="0" y="110" width="220" height="12" fill="#9FE1CB"/>
+              <rect x="72"  y="0" width="12" height="170" fill="#9FE1CB"/>
+              <rect x="145" y="0" width="12" height="170" fill="#9FE1CB"/>
+              <!-- geofence circles -->
+              <circle cx="110" cy="85" r="62" fill="none" stroke="#1D9E75" stroke-width="1.2" stroke-dasharray="5,4" opacity="0.55"/>
+              <circle cx="110" cy="85" r="35" fill="none" stroke="#1D9E75" stroke-width="1" opacity="0.3"/>
+              <!-- user dot -->
+              <circle cx="110" cy="85" r="14" fill="#1D9E75" fill-opacity="0.15"/>
+              <circle cx="110" cy="85" r="6"  fill="#1D9E75"/>
+              <!-- pharmacy pins -->
+              <circle cx="130" cy="68" r="7" fill="#378ADD"/>
+              <circle cx="92"  cy="100" r="7" fill="#378ADD"/>
+              <circle cx="155" cy="95" r="6" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>
+              <!-- distance dashes -->
+              <line x1="110" y1="85" x2="130" y2="68" stroke="#1D9E75" stroke-width="1" stroke-dasharray="3,3"/>
+              <line x1="110" y1="85" x2="92" y2="100" stroke="#1D9E75" stroke-width="1" stroke-dasharray="3,3"/>
+            </svg>
+            <div class="hero-map-label">
+              <i class="ti ti-focus-2"></i> 5 km geofence
+            </div>
+          </div>
+        </div>
+
+        <div class="scope-banner">
+          <div class="scope-banner-title"><i class="ti ti-zoom-exclamation"></i> Scope</div>
+          <p>Community pharmacies <strong>around</strong> Tarlac Provincial Hospital are in scope. Pharmacies <strong>inside TPH</strong> are out of scope. The service is for <strong>all users</strong>, not a special-priority group.</p>
+        </div>
+
+        <!-- Two-col: medicines + tips -->
+        <div class="grid-2">
+          <div>
+            <div class="section-hd">
+              <h2><i class="ti ti-pill"></i> Available medicines</h2>
+              <button class="btn btn-ghost btn-sm" onclick="switchTab('medicines')">View all <i class="ti ti-arrow-right"></i></button>
+            </div>
+            <div id="home-med-preview" style="display:flex; flex-direction:column; gap:9px;">
+              <div class="text-muted text-sm">Loading medicines…</div>
+            </div>
+          </div>
+
+          <div class="tips-panel">
+            <h3><i class="ti ti-info-circle"></i> Medicine safety tips</h3>
+            <div class="tip-row"><div class="tip-dot"></div><div class="tip-text">Take medications exactly as directed — on time and with or without food as specified.</div></div>
+            <div class="tip-row"><div class="tip-dot"></div><div class="tip-text">Filling all prescriptions at one pharmacy helps prevent dangerous drug interactions.</div></div>
+            <div class="tip-row"><div class="tip-dot"></div><div class="tip-text">Complete all antibiotic courses even if you feel better, to prevent resistance.</div></div>
+            <div class="tip-row"><div class="tip-dot"></div><div class="tip-text">Avoid self-medicating. Ask a pharmacist before combining OTC drugs with prescriptions.</div></div>
+            <div class="tip-row"><div class="tip-dot"></div><div class="tip-text">Keep medicines in a cool, dry place out of reach of children. Dispose of expired medicines properly.</div></div>
+            <div class="tip-row"><div class="tip-dot"></div><div class="tip-text">Turn on lights when taking medicine to avoid dosage errors.</div></div>
+          </div>
+        </div>
+
+      </div><!-- /tab-home -->
+
+
+      <!-- ── PHARMACIES TAB ── -->
+      <div id="tab-content-pharmacies" class="tab-panel hidden">
+        <div class="section-hd">
+          <h2><i class="ti ti-map-pin"></i> Nearest pharmacies</h2>
+        </div>
+        <div class="geofence-params" id="geofence-params">
+          <div class="geofence-params-title"><i class="ti ti-radar"></i> Geofencing parameters</div>
+          <div class="geofence-params-grid" id="geofence-params-grid">
+            <div>Shape: circular (haversine)</div>
+            <div>Default center: TPH 15.4870, 120.5960</div>
+            <div>Default radius: 5,000 m (5 km)</div>
+            <div>Admin range: 500–10,000 m</div>
+            <div>Coverage: community pharmacies around TPH</div>
+            <div>Excluded: pharmacies inside TPH</div>
+          </div>
+        </div>
+        <div class="geo-layout">
+          <!-- Sidebar list -->
+          <div>
+            <div class="geofence-notice" id="geofence-notice">
+              <i class="ti ti-radar"></i>
+              <span id="geofence-notice-text">Loading pharmacy map…</span>
+            </div>
+            <div class="pharmacy-list" id="pharmacy-list">
+              <div class="text-muted text-sm" style="padding:12px;">Loading pharmacies…</div>
+            </div>
+            <button class="btn btn-primary directions-btn" type="button" id="pharmacy-directions-btn" onclick="openPharmacyDirections()">
+              <i class="ti ti-navigation"></i> Get directions — I'm HERE!
+            </button>
+          </div>
+
+          <!-- Map -->
+          <div class="geo-map-wrap">
+            <div id="guest-leaflet-map"></div>
+            <div class="map-overlay" id="pharmacy-map-overlay">
+              <i class="ti ti-current-location"></i> Tarlac City, Tarlac, PH
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-pharmacies -->
+
+
+      <!-- ── MEDICINES TAB ── -->
+      <div id="tab-content-medicines" class="tab-panel hidden">
+        <div class="section-hd">
+          <h2><i class="ti ti-pill"></i> Medicine availability</h2>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="med-search" placeholder="Search medicine..." style="padding:7px 11px; font-size:13px; border:1px solid var(--border-md); border-radius:var(--radius-md); width:200px; background:var(--surface); color:var(--text);" oninput="filterMeds(this.value)" />
+            <select id="med-pharmacy-filter" style="padding:7px 11px; font-size:13px; border:1px solid var(--border-md); border-radius:var(--radius-md); background:var(--surface); color:var(--text);" onchange="filterMedsByPharmacy(this.value)">
+              <option value="">All pharmacies</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid-auto" id="med-grid">
+          <!-- Medicine cards injected by JS -->
+        </div>
+      </div><!-- /tab-medicines -->
+
+
+      <!-- ── INQUIRIES TAB ── -->
+      <div id="tab-content-inquiries" class="tab-panel hidden">
+        <div class="inquiry-layout">
+
+          <!-- Form -->
+          <div>
+            <div class="section-hd">
+              <h2><i class="ti ti-message-question"></i> Send an inquiry</h2>
+            </div>
+            <div class="card card-p">
+              <div class="form-group">
+                <label>Medicine name</label>
+                <input type="text" id="inq-medicine" placeholder="e.g. Paracetamol 500mg" />
+              </div>
+              <div class="form-group">
+                <label>Select pharmacy</label>
+                <select id="inq-pharmacy">
+                  <option value="">Any pharmacy</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Category</label>
+                <select id="inq-category">
+                  <option>Availability check</option>
+                  <option>Medicine information</option>
+                  <option>Pricing inquiry</option>
+                  <option>Alternative medicine</option>
+                  <option>Health advice</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Message / Question</label>
+                <textarea id="inq-message" placeholder="Describe your inquiry or question in detail..."></textarea>
+              </div>
+              <button class="btn btn-primary btn-full" type="button" onclick="submitInquiryDemo()">
+                <i class="ti ti-send"></i> Submit inquiry
+              </button>
+            </div>
+          </div>
+
+          <!-- Recent inquiries panel -->
+          <div>
+            <div class="section-hd">
+              <h2 style="font-size:14px;"><i class="ti ti-clock-history"></i> Your inquiries</h2>
+            </div>
+            <div id="inquiry-list">
+              <div class="text-muted text-sm" style="padding:12px;">Log in to send and track your inquiries.</div>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /tab-inquiries -->
+
+    </div><!-- /scroll-area -->
+  </div><!-- /view-guest -->
+
+<!-- partials/view-auth.html -->
+  <!-- ══════════════════════════════════════════
+       VIEW: AUTH (Login / Sign Up)
+  ══════════════════════════════════════════ -->
+  <div class="view" id="view-auth">
+    <div class="auth-wrap">
+      <div class="auth-card">
+
+        <div class="auth-header">
+          <div class="auth-logo-icon">
+            <i class="ti ti-first-aid-kit" aria-hidden="true"></i>
+          </div>
+          <div class="auth-title">PharmaLocate</div>
+          <div class="auth-sub">Inquiry, availability, sale &amp; inventory with geofencing</div>
+        </div>
+
+        <div class="auth-seg">
+          <button class="auth-seg-btn active" onclick="toggleAuthMode('login')" id="auth-login-btn">Log in</button>
+          <button class="auth-seg-btn" onclick="toggleAuthMode('signup')" id="auth-signup-btn">Sign up</button>
+        </div>
+
+        <!-- Login form -->
+        <form id="auth-login-form" onsubmit="loginUser(event)">
+          <div class="form-group">
+            <label for="login-username">Username or email</label>
+            <input type="text" id="login-username" name="login" autocomplete="username" placeholder="Enter your username or email" />
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" name="password" autocomplete="current-password" placeholder="Enter your password" />
+          </div>
+          <button class="btn btn-primary btn-full mb-8" type="submit" id="login-submit-btn">
+            <i class="ti ti-login"></i> Log in
+          </button>
+          <button class="btn btn-full btn-ghost" type="button" style="font-size:12px; color:var(--text-2);" onclick="switchView('guest')">
+            Continue as guest
+          </button>
+        </form>
+
+        <!-- Sign up form -->
+        <form id="auth-signup-form" class="hidden" onsubmit="registerUser(event)">
+          <div class="form-group">
+            <label for="signup-username">Username</label>
+            <input type="text" id="signup-username" name="username" autocomplete="username" placeholder="Choose a username" />
+          </div>
+          <div class="form-group">
+            <label for="signup-email">Email address</label>
+            <input type="email" id="signup-email" name="email" autocomplete="email" placeholder="your@email.com" />
+          </div>
+          <div class="form-group">
+            <label for="signup-password">Password</label>
+            <input type="password" id="signup-password" name="password" autocomplete="new-password" placeholder="At least 8 characters" />
+          </div>
+          <button class="btn btn-primary btn-full" type="submit">
+            <i class="ti ti-user-check"></i> Create account
+          </button>
+        </form>
+
+        <div class="auth-footer">
+          <a onclick="switchView('guest')">← Browse as guest without an account</a>
+        </div>
+
+      </div>
+    </div>
+  </div><!-- /view-auth -->
+
+<!-- partials/view-admin.html -->
+  <!-- VIEW: ADMIN -->
+  <div class="view" id="view-admin">
+    <div class="admin-shell">
+
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-label">Main</div>
+          <div class="sidebar-item active" onclick="switchAdminSection('dashboard')">
+            <i class="ti ti-layout-dashboard"></i> <span>Dashboard</span>
+          </div>
+          <div class="sidebar-item" onclick="switchAdminSection('inq-mgmt')">
+            <i class="ti ti-message-question"></i> <span>Reply to inquiries</span>
+            <span class="badge-count" id="admin-pending-badge">0</span>
+          </div>
+          <div class="sidebar-item" onclick="switchAdminSection('stock')">
+            <i class="ti ti-packages"></i> <span>Inventory management</span>
+          </div>
+          <div class="sidebar-item" onclick="switchAdminSection('pos')">
+            <i class="ti ti-cash-register"></i> <span>POS — sales</span>
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Settings</div>
+          <div class="sidebar-item" onclick="switchAdminSection('pharmacies')">
+            <i class="ti ti-building-store"></i> <span>Manage pharmacies</span>
+          </div>
+          <div class="sidebar-item" onclick="switchAdminSection('geofences')">
+            <i class="ti ti-map-pins"></i> <span>Geofences</span>
+          </div>
+          <div class="sidebar-item" onclick="switchAdminSection('users')">
+            <i class="ti ti-users"></i> <span>User management</span>
+          </div>
+          <div class="sidebar-item" onclick="switchAdminSection('settings')">
+            <i class="ti ti-settings"></i> <span>System settings</span>
+          </div>
+          <div class="sidebar-item" onclick="switchAdminSection('backup')">
+            <i class="ti ti-database-export"></i> <span>Backup &amp; export</span>
+          </div>
+        </div>
+        <div class="sidebar-bottom">
+          <div class="sidebar-item" onclick="logoutUser()">
+            <i class="ti ti-logout"></i> <span>Log out</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ADMIN CONTENT -->
+      <div class="admin-content">
+
+        <!-- ── DASHBOARD ── -->
+        <div class="admin-section active" id="admin-dashboard">
+          <div class="section-hd">
+            <h2><i class="ti ti-layout-dashboard"></i> Dashboard overview</h2>
+          </div>
+
+          <div class="grid-4 mb-16">
+            <div class="stat-card">
+              <div class="stat-label"><i class="ti ti-building-store"></i> Pharmacies</div>
+              <div class="stat-value" id="dash-pharmacies-count">—</div>
+              <div class="stat-delta up" id="dash-pharmacies-delta">Active locations</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label"><i class="ti ti-message-question"></i> Inquiries today</div>
+              <div class="stat-value" id="dash-inquiries-today">—</div>
+              <div class="stat-delta warn" id="dash-inquiries-pending">— pending</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label"><i class="ti ti-pill"></i> Medicines tracked</div>
+              <div class="stat-value" id="dash-medicines-count">—</div>
+              <div class="stat-delta warn" id="dash-low-stock">— low stock alerts</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label"><i class="ti ti-cash-register"></i> Sales today</div>
+              <div class="stat-value" id="dash-sales-today">—</div>
+              <div class="stat-delta up">From POS transactions</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <!-- Activity feed -->
+            <div class="card card-p">
+              <div class="card-header">
+                <span class="card-title"><i class="ti ti-activity"></i> Recent activity</span>
+              </div>
+              <div id="dash-activity-list">
+              <div class="activity-item">
+                <div class="activity-icon" style="background:#DCFCE7;">
+                  <i class="ti ti-message-check" style="color:#166534;"></i>
+                </div>
+                <div class="activity-text">
+                  Loading activity…
+                </div>
+              </div>
+              </div>
+            </div>
+
+            <!-- Geofence status -->
+            <div class="card card-p">
+              <div class="card-header">
+                <span class="card-title"><i class="ti ti-map-pins"></i> Geofence status</span>
+                <button class="btn btn-sm" onclick="switchAdminSection('geofences')">Manage</button>
+              </div>
+              <div style="background:var(--green-light); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
+                  <span style="color:var(--text-2);">Active geofences</span>
+                  <span style="font-weight:500; color:var(--green-700);" id="dash-geofences-active">—</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
+                  <span style="color:var(--text-2);">Assigned pharmacies</span>
+                  <span style="font-weight:500; color:var(--green-700);" id="dash-assigned-pharmacies">—</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
+                  <span style="color:var(--text-2);">Coverage radius</span>
+                  <span style="font-weight:500; color:var(--green-700);">5–10 km</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:13px;">
+                  <span style="color:var(--text-2);">GPS integration</span>
+                  <span class="badge badge-green">Active</span>
+                </div>
+              </div>
+              <div class="card-header" style="margin-bottom:10px;">
+                <span class="card-title" style="font-size:13px;"><i class="ti ti-users"></i> User stats</span>
+              </div>
+              <div style="font-size:13px; display:flex; flex-direction:column; gap:7px;">
+                <div style="display:flex; justify-content:space-between;">
+                  <span style="color:var(--text-2);">Registered users</span><span style="font-weight:500;" id="dash-users-total">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div><!-- /admin-dashboard -->
+
+
+        <!-- ── INQUIRY MANAGEMENT ── -->
+        <div class="admin-section" id="admin-inq-mgmt">
+          <div class="section-hd">
+            <h2><i class="ti ti-message-question"></i> Reply to inquiries</h2>
+            <span class="badge badge-amber" id="admin-inq-header-badge">0 pending</span>
+          </div>
+
+          <div class="card mb-16" style="overflow:hidden;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Medicine</th>
+                  <th>Pharmacy</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="admin-inq-table-body">
+                <tr><td colspan="5" class="text-muted text-sm" style="padding:16px;">Loading inquiries…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Reply panel -->
+          <div class="card card-p" id="admin-reply-panel">
+            <div class="card-header">
+              <span class="card-title" id="admin-reply-title"><i class="ti ti-message-reply"></i> Select an inquiry to reply</span>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <input type="text" id="admin-reply-input" placeholder="Type your reply to the customer..." style="flex:1; padding:8px 11px; border:1px solid var(--border-md); border-radius:var(--radius-md); font-size:13px; background:var(--surface); color:var(--text);" />
+              <button class="btn btn-primary" type="button" id="admin-reply-send-btn" onclick="sendAdminReply()"><i class="ti ti-send"></i> Send</button>
+            </div>
+            <div style="display:flex; gap:7px; margin-top:10px; flex-wrap:wrap;">
+              <button class="btn btn-sm btn-ghost" type="button" style="font-size:12px;" onclick="setReplyTemplate('In stock — available now.')">In stock — available now</button>
+              <button class="btn btn-sm btn-ghost" type="button" style="font-size:12px;" onclick="setReplyTemplate('Currently out of stock.')">Currently out of stock</button>
+              <button class="btn btn-sm btn-ghost" type="button" style="font-size:12px;" onclick="setReplyTemplate('Please visit our pharmacy for more info.')">Visit pharmacy for info</button>
+            </div>
+          </div>
+        </div><!-- /admin-inq-mgmt -->
+
+
+        <!-- ── STOCK OF MEDICINES ── -->
+        <div class="admin-section" id="admin-stock">
+          <div class="section-hd">
+            <h2><i class="ti ti-packages"></i> Inventory management</h2>
+            <button class="btn btn-primary btn-sm"><i class="ti ti-plus"></i> Add medicine</button>
+          </div>
+
+          <div class="card" style="overflow:hidden;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Medicine</th>
+                  <th>Category</th>
+                  <th>Pharmacy</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="admin-stock-table-body">
+                <tr><td colspan="7" class="text-muted text-sm" style="padding:16px;">Loading stock…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div><!-- /admin-stock -->
+
+
+        <!-- ── POS SYSTEM ── -->
+        <div class="admin-section" id="admin-pos">
+          <div class="section-hd">
+            <h2><i class="ti ti-cash-register"></i> Point of sale — record a sale</h2>
+          </div>
+
+          <div class="pos-toolbar mb-12 hidden" id="pos-pharmacy-toolbar">
+            <div class="form-group" style="margin:0; max-width:320px;">
+              <label for="pos-pharmacy-select">Pharmacy</label>
+              <select id="pos-pharmacy-select" onchange="onPosPharmacyChange()"></select>
+            </div>
+          </div>
+
+          <div class="pos-layout">
+            <!-- Products grid -->
+            <div>
+              <div class="text-sm text-muted mb-12" id="pos-products-hint">Click a product to add it to the cart</div>
+              <div class="pos-grid" id="pos-product-grid">
+                <div class="text-muted text-sm" style="padding:12px;">Loading products…</div>
+              </div>
+            </div>
+
+            <!-- Cart -->
+            <div class="pos-cart">
+              <div class="cart-header">
+                <i class="ti ti-shopping-cart"></i> Cart
+              </div>
+              <div class="cart-items-list" id="pos-cart-list">
+                <div class="cart-empty">No items added yet</div>
+              </div>
+              <div class="cart-totals">
+                <div class="cart-total-row">
+                  <span>Total items</span>
+                  <span id="pos-total-qty">0</span>
+                </div>
+                <div class="cart-total-row">
+                  <span>Subtotal</span>
+                  <span id="pos-subtotal">₱0.00</span>
+                </div>
+                <div class="cart-total-main">
+                  <span>Total</span>
+                  <span id="pos-total">₱0.00</span>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-full" type="button" onclick="posProcessSale()">
+                <i class="ti ti-check"></i> Process sale
+              </button>
+              <button class="btn btn-full btn-ghost text-sm" type="button" onclick="posClearCart()" style="color:var(--text-2); margin-top:4px;">
+                <i class="ti ti-trash"></i> Clear cart
+              </button>
+            </div>
+          </div>
+
+          <div class="card card-p" style="margin-top:20px;">
+            <div class="card-header">
+              <span class="card-title"><i class="ti ti-receipt"></i> Recent sales</span>
+            </div>
+            <div id="pos-recent-sales">
+              <div class="text-muted text-sm" style="padding:12px;">Loading transactions…</div>
+            </div>
+          </div>
+        </div><!-- /admin-pos -->
+
+
+        <!-- ── MANAGE PHARMACIES ── -->
+        <div class="admin-section" id="admin-pharmacies">
+          <div class="section-hd">
+            <h2><i class="ti ti-building-store"></i> Manage pharmacies</h2>
+            <button class="btn btn-primary btn-sm" type="button" id="admin-pharmacy-add-btn" onclick="openPharmacyForm()"><i class="ti ti-plus"></i> Add pharmacy</button>
+          </div>
+
+          <div id="admin-pharmacy-list">
+            <div class="text-muted text-sm" style="padding:12px;">Loading pharmacies…</div>
+          </div>
+
+          <div class="card card-p hidden" id="admin-pharmacy-form-panel" style="margin-top:16px;">
+            <div class="card-header">
+              <span class="card-title" id="admin-pharmacy-form-title"><i class="ti ti-building-store"></i> Add pharmacy</span>
+            </div>
+            <input type="hidden" id="admin-pharmacy-edit-id" value="" />
+            <div class="form-group">
+              <label for="admin-pharmacy-name">Name</label>
+              <input type="text" id="admin-pharmacy-name" placeholder="Pharmacy name" />
+            </div>
+            <div class="form-group">
+              <label for="admin-pharmacy-address">Address</label>
+              <input type="text" id="admin-pharmacy-address" placeholder="Street, city" />
+            </div>
+            <div class="form-group">
+              <label for="admin-pharmacy-contact">Contact number</label>
+              <input type="text" id="admin-pharmacy-contact" placeholder="+63 900 000 0000" />
+            </div>
+            <div class="form-group">
+              <label for="admin-pharmacy-hours">Operating hours</label>
+              <input type="text" id="admin-pharmacy-hours" placeholder="Mon–Sat 8:00 AM – 8:00 PM" />
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div class="form-group">
+                <label for="admin-pharmacy-lat">Latitude</label>
+                <input type="text" id="admin-pharmacy-lat" placeholder="15.4890" />
+              </div>
+              <div class="form-group">
+                <label for="admin-pharmacy-lng">Longitude</label>
+                <input type="text" id="admin-pharmacy-lng" placeholder="120.5980" />
+              </div>
+            </div>
+            <div class="form-group hidden" id="admin-pharmacy-active-wrap">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="checkbox" id="admin-pharmacy-active" checked />
+                Active (visible to customers)
+              </label>
+            </div>
+            <div class="form-group">
+              <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
+                <input type="checkbox" id="admin-pharmacy-inside-tph" style="margin-top:3px;" />
+                <span>Inside Tarlac Provincial Hospital — excluded from the public locator (panel scope)</span>
+              </label>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" type="button" onclick="savePharmacy()"><i class="ti ti-check"></i> Save</button>
+              <button class="btn btn-sm" type="button" onclick="closePharmacyForm()">Cancel</button>
+            </div>
+          </div>
+        </div><!-- /admin-pharmacies -->
+
+
+        <!-- ── GEOFENCE MANAGEMENT ── -->
+        <div class="admin-section" id="admin-geofences">
+          <div class="section-hd">
+            <h2><i class="ti ti-map-pins"></i> Geofence management</h2>
+            <button class="btn btn-primary btn-sm" type="button" id="admin-geofence-add-btn" onclick="openGeofenceForm()"><i class="ti ti-plus"></i> Create geofence</button>
+          </div>
+
+          <div class="geofence-notice" style="margin-bottom:14px;">
+            <i class="ti ti-info-circle"></i>
+            <span>Geofence is a <strong>circle</strong> in meters (500–10,000). Default center is TPH (15.4870, 120.5960), default radius 5,000 m. Does not cover pharmacies inside TPH.</span>
+          </div>
+          <div class="geofence-notice hidden" id="admin-geofence-staff-notice" style="margin-bottom:14px;">
+            <i class="ti ti-eye"></i>
+            <span>Read-only view — only admins can create, edit, or assign geofence zones.</span>
+          </div>
+
+          <div class="geo-admin-layout">
+            <div class="geo-map-wrap" style="min-height:350px;">
+              <div id="admin-leaflet-map"></div>
+              <div class="map-overlay" id="admin-geofence-map-overlay">
+                <i class="ti ti-map-pins"></i> Loading map…
+              </div>
+            </div>
+
+            <div>
+              <div class="text-sm fw-500 text-muted mb-12">Geofence zones</div>
+              <div id="admin-geofence-list">
+                <div class="text-muted text-sm" style="padding:12px;">Loading geofences…</div>
+              </div>
+
+              <div class="divider"></div>
+              <div id="admin-geofence-assign-wrap">
+                <div class="text-sm fw-500 text-muted mb-12">Assign pharmacy to geofence</div>
+                <div class="form-group">
+                  <label for="admin-geofence-assign-pharmacy">Pharmacy</label>
+                  <select id="admin-geofence-assign-pharmacy">
+                    <option value="">Select pharmacy…</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="admin-geofence-assign-zone">Geofence zone</label>
+                  <select id="admin-geofence-assign-zone">
+                    <option value="">Select zone…</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary btn-full btn-sm" type="button" onclick="assignPharmacyToGeofence()"><i class="ti ti-check"></i> Assign</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card card-p hidden" id="admin-geofence-form-panel" style="margin-top:16px;">
+            <div class="card-header">
+              <span class="card-title" id="admin-geofence-form-title"><i class="ti ti-map-pins"></i> Create geofence</span>
+            </div>
+            <input type="hidden" id="admin-geofence-edit-id" value="" />
+            <div class="form-group">
+              <label for="admin-geofence-name">Zone name</label>
+              <input type="text" id="admin-geofence-name" placeholder="e.g. Hospital Zone" />
+            </div>
+            <div class="form-group">
+              <label for="admin-geofence-description">Description</label>
+              <input type="text" id="admin-geofence-description" placeholder="Optional description" />
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div class="form-group">
+                <label for="admin-geofence-lat">Center latitude</label>
+                <input type="text" id="admin-geofence-lat" placeholder="15.4870" />
+              </div>
+              <div class="form-group">
+                <label for="admin-geofence-lng">Center longitude</label>
+                <input type="text" id="admin-geofence-lng" placeholder="120.5960" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="admin-geofence-radius">Radius (meters, 500–10000)</label>
+              <input type="number" id="admin-geofence-radius" min="500" max="10000" step="100" value="5000" />
+              <div class="text-hint text-xs mt-4">Circular coverage from the center point. Seeded zone uses 5,000 m around TPH.</div>
+            </div>
+            <div class="form-group hidden" id="admin-geofence-active-wrap">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="checkbox" id="admin-geofence-active" checked />
+                Active (visible to customers)
+              </label>
+            </div>
+            <div class="form-group hidden" id="admin-geofence-pharmacies-wrap">
+              <label>Assigned pharmacies</label>
+              <div id="admin-geofence-pharmacy-checks" class="geofence-pharmacy-checks"></div>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" type="button" onclick="saveGeofence()"><i class="ti ti-check"></i> Save</button>
+              <button class="btn btn-sm" type="button" onclick="closeGeofenceForm()">Cancel</button>
+            </div>
+          </div>
+        </div><!-- /admin-geofences -->
+
+
+        <!-- ── USER MANAGEMENT ── -->
+        <div class="admin-section" id="admin-users">
+          <div class="section-hd">
+            <h2><i class="ti ti-users"></i> User management</h2>
+          </div>
+          <div id="admin-users-staff-notice" class="card card-p hidden" style="margin-bottom:16px; background:var(--surface-2);">
+            <div class="text-sm">Only administrators can manage user accounts.</div>
+          </div>
+          <div id="admin-users-panel">
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Username</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Pharmacy</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="admin-users-tbody">
+                  <tr><td colspan="6" class="text-muted text-sm" style="padding:16px;">Loading users…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card card-p hidden" id="admin-user-form-panel" style="margin-top:16px;">
+            <div class="card-header">
+              <span class="card-title"><i class="ti ti-user-edit"></i> Edit user</span>
+            </div>
+            <input type="hidden" id="admin-user-edit-id" value="" />
+            <div class="form-group">
+              <label>Account</label>
+              <div id="admin-user-edit-label" class="text-sm fw-500">—</div>
+            </div>
+            <div class="form-group">
+              <label for="admin-user-role">Role</label>
+              <select id="admin-user-role" onchange="toggleAdminUserPharmacyField()">
+                <option value="customer">Customer</option>
+                <option value="staff">Staff</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div class="form-group hidden" id="admin-user-pharmacy-wrap">
+              <label for="admin-user-pharmacy">Assigned pharmacy</label>
+              <select id="admin-user-pharmacy"></select>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" type="button" onclick="saveAdminUser()"><i class="ti ti-check"></i> Save</button>
+              <button class="btn btn-sm" type="button" onclick="closeAdminUserForm()">Cancel</button>
+            </div>
+          </div>
+        </div><!-- /admin-users -->
+
+
+        <!-- ── SYSTEM SETTINGS ── -->
+        <div class="admin-section" id="admin-settings">
+          <div class="section-hd">
+            <h2><i class="ti ti-settings"></i> System settings</h2>
+          </div>
+          <div id="admin-settings-staff-notice" class="card card-p hidden" style="margin-bottom:16px; background:var(--surface-2);">
+            <div class="text-sm">System settings can only be changed by administrators.</div>
+          </div>
+          <div class="grid-2">
+            <div class="card card-p">
+              <div class="card-header">
+                <span class="card-title"><i class="ti ti-bell"></i> Notifications &amp; inventory</span>
+              </div>
+              <div class="form-group">
+                <label for="setting-low-stock-threshold">Low stock threshold (units)</label>
+                <input type="number" id="setting-low-stock-threshold" min="1" max="1000" value="10" />
+              </div>
+              <div class="form-group">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                  <input type="checkbox" id="setting-notification-low-stock" checked />
+                  Email alerts for low stock
+                </label>
+              </div>
+              <div class="form-group">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                  <input type="checkbox" id="setting-notification-inquiries" checked />
+                  Notify staff on new inquiries
+                </label>
+              </div>
+              <button class="btn btn-primary btn-sm" type="button" id="setting-save-btn" onclick="saveAdminSettings()">
+                <i class="ti ti-device-floppy"></i> Save settings
+              </button>
+            </div>
+            <div class="settings-grid">
+            <div class="setting-card" onclick="switchAdminSection('pharmacies')">
+              <div class="setting-icon"><i class="ti ti-building-store"></i></div>
+              <div>
+                <div class="setting-title">Add / edit pharmacies</div>
+                <div class="setting-desc">Manage pharmacy profiles, contact details, operating hours and assignments.</div>
+              </div>
+            </div>
+            <div class="setting-card" onclick="switchAdminSection('geofences')">
+              <div class="setting-icon"><i class="ti ti-map-pins"></i></div>
+              <div>
+                <div class="setting-title">Assign pharmacies to geofences</div>
+                <div class="setting-desc">Assign pharmacies to geofence zones and configure boundary radius.</div>
+              </div>
+            </div>
+            <div class="setting-card" onclick="switchAdminSection('users')">
+              <div class="setting-icon"><i class="ti ti-users"></i></div>
+              <div>
+                <div class="setting-title">User management</div>
+                <div class="setting-desc">View registered accounts and manage roles and permissions.</div>
+              </div>
+            </div>
+            <div class="setting-card" onclick="switchAdminSection('backup')">
+              <div class="setting-icon"><i class="ti ti-database-export"></i></div>
+              <div>
+                <div class="setting-title">Backup &amp; data export</div>
+                <div class="setting-desc">Schedule automatic backups and export inventory or transaction data.</div>
+              </div>
+            </div>
+            </div>
+          </div>
+          <div class="card card-p hidden" id="admin-settings-backup-card" style="margin-top:16px;">
+            <div class="card-header">
+              <span class="card-title"><i class="ti ti-clock"></i> Scheduled backup</span>
+            </div>
+            <div class="form-group">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="checkbox" id="setting-backup-enabled" />
+                Enable automatic daily backup
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="setting-backup-time">Run at (24h)</label>
+              <input type="time" id="setting-backup-time" value="02:00" />
+            </div>
+          </div>
+        </div><!-- /admin-settings -->
+
+
+        <!-- ── BACKUP & EXPORT ── -->
+        <div class="admin-section" id="admin-backup">
+          <div class="section-hd">
+            <h2><i class="ti ti-database-export"></i> Backup &amp; data export</h2>
+          </div>
+          <div id="admin-backup-staff-notice" class="card card-p hidden" style="margin-bottom:16px; background:var(--surface-2);">
+            <div class="text-sm">Only administrators can export system data.</div>
+          </div>
+          <div class="grid-2">
+            <div class="card card-p">
+              <div class="card-header">
+                <span class="card-title"><i class="ti ti-database"></i> Manual export</span>
+              </div>
+              <div class="form-group">
+                <label for="export-scope">Export scope</label>
+                <select id="export-scope">
+                  <option value="full">Full system snapshot</option>
+                  <option value="inventory">Medicine inventory only</option>
+                  <option value="transactions">Transactions</option>
+                  <option value="inquiries">Inquiries</option>
+                  <option value="pharmacies">Pharmacy &amp; geofence data</option>
+                  <option value="users">User accounts only</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="export-format">Export format</label>
+                <select id="export-format">
+                  <option value="json">JSON export (.json)</option>
+                  <option value="csv">CSV spreadsheet (.csv)</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-full" type="button" id="export-download-btn" onclick="downloadAdminExport()">
+                <i class="ti ti-download"></i> Download export
+              </button>
+            </div>
+
+            <div>
+              <div class="text-sm fw-500 text-muted mb-12">Export tips</div>
+              <div class="backup-file">
+                <i class="ti ti-file-spreadsheet"></i>
+                <div class="backup-file-info">
+                  <div class="backup-file-name">Inventory CSV</div>
+                  <div class="backup-file-meta">Best for spreadsheet review of stock levels</div>
+                </div>
+              </div>
+              <div class="backup-file">
+                <i class="ti ti-file-code"></i>
+                <div class="backup-file-info">
+                  <div class="backup-file-name">Full JSON snapshot</div>
+                  <div class="backup-file-meta">Includes counts, inventory rows, and recent transactions</div>
+                </div>
+              </div>
+
+              <div class="divider"></div>
+              <div class="text-sm fw-500 text-muted mb-12">Scheduled backups</div>
+              <div id="backup-schedule-status" style="background:var(--surface-2); border-radius:var(--radius-md); padding:13px 15px; font-size:13px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div class="fw-500">Automatic daily backup</div>
+                  <div class="text-hint text-xs mt-4" id="backup-schedule-detail">Configure in System settings</div>
+                </div>
+                <span class="badge badge-gray" id="backup-schedule-badge">Off</span>
+              </div>
+            </div>
+          </div>
+        </div><!-- /admin-backup -->
+
+      </div><!-- /admin-content -->
+    </div><!-- /admin-shell -->
+  </div><!-- /view-admin -->
+
+</div><!-- /app -->
+
+<!-- Help assistant — bilingual FAQ shortcuts for pharmacies, medicines, and inquiries -->
+<div id="chatbot" class="chatbot" hidden>
+  <div id="chatbot-panel" class="chatbot-panel">
+    <div class="chatbot-head">
+      <div>
+        <div class="chatbot-title">Help assistant</div>
+        <div class="chatbot-sub" id="chatbot-sub">Quick help with pharmacies, medicines, and inquiries</div>
+      </div>
+      <div class="chatbot-head-actions">
+        <div class="chatbot-lang" role="group" aria-label="Language">
+          <button type="button" id="chatbot-lang-en" class="chatbot-lang-btn is-active">EN</button>
+          <button type="button" id="chatbot-lang-fil" class="chatbot-lang-btn">FIL</button>
+        </div>
+        <button type="button" id="chatbot-close" class="chatbot-icon-btn" aria-label="Close help">
+          <i class="ti ti-x"></i>
+        </button>
+      </div>
+    </div>
+    <div id="chatbot-messages" class="chatbot-messages"></div>
+    <div id="chatbot-choices" class="chatbot-choices"></div>
+  </div>
+  <button type="button" id="chatbot-toggle" class="chatbot-toggle" aria-label="Open help assistant">
+    <i class="ti ti-message-chatbot"></i>
+    <span>Help</span>
+  </button>
+</div>
+
+<script>
+  window.setTimeout(function () {
+    document.documentElement.classList.remove('is-booting');
+    document.documentElement.classList.add('is-ready');
+  }, 4000);
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>
