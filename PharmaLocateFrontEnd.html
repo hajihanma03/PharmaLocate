@@ -70,6 +70,19 @@
       </button>
     </div>
 
+    <div id="a11y-zoom" class="a11y-zoom" role="group" aria-label="Zoom in and zoom out">
+      <span class="a11y-zoom-kicker" id="a11y-zoom-kicker">Text size</span>
+      <button type="button" id="a11y-zoom-out" class="a11y-zoom-btn" aria-label="Zoom out">
+        <i class="ti ti-minus" aria-hidden="true"></i>
+        <span id="a11y-zoom-out-label">Zoom out</span>
+      </button>
+      <span id="a11y-zoom-value" class="a11y-zoom-value" aria-live="polite">100%</span>
+      <button type="button" id="a11y-zoom-in" class="a11y-zoom-btn a11y-zoom-btn-primary" aria-label="Zoom in">
+        <i class="ti ti-plus" aria-hidden="true"></i>
+        <span id="a11y-zoom-in-label">Zoom in</span>
+      </button>
+    </div>
+
     <!-- Auth area -->
     <div class="nav-auth" id="nav-auth">
       <button class="btn btn-ghost btn-sm" onclick="switchView('auth')">
@@ -1013,10 +1026,16 @@
     <div id="chatbot-messages" class="chatbot-messages"></div>
     <div id="chatbot-choices" class="chatbot-choices"></div>
   </div>
-  <button type="button" id="chatbot-toggle" class="chatbot-toggle" aria-label="Open help assistant">
-    <i class="ti ti-message-chatbot"></i>
-    <span>Help</span>
-  </button>
+  <div class="chatbot-docks">
+    <button type="button" id="preset-questions-toggle" class="preset-questions-toggle" aria-label="Open preset questions">
+      <i class="ti ti-list-check" aria-hidden="true"></i>
+      <span id="preset-questions-label">Preset questions</span>
+    </button>
+    <button type="button" id="chatbot-toggle" class="chatbot-toggle" aria-label="Open help assistant">
+      <i class="ti ti-message-chatbot"></i>
+      <span>Help</span>
+    </button>
+  </div>
 </div>
 
 <script>

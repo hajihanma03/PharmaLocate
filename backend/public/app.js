@@ -2322,12 +2322,22 @@ function chatbotCopy() {
       subtitle: 'Mabilis na tulong sa botika, gamot, at inquiry',
       welcome: 'Pumili po ng tanong sa ibaba. Para po ito sa lahat ng user — tumulong sa botika, gamot, o inquiry sa pharmacist.',
       more: 'Iba pang tanong',
+      presets: 'Mga tanong',
+      presetsAria: 'Buksan ang mga preset na tanong',
+      zoomKicker: 'Laki ng teksto',
+      zoomIn: 'Palakihin',
+      zoomOut: 'Paliitin',
     };
   }
   return {
     subtitle: 'Quick help with pharmacies, medicines, and inquiries',
     welcome: 'Tap a question below. This help is for all users: find a community pharmacy, check medicines, or send an inquiry.',
     more: 'More questions',
+    presets: 'Preset questions',
+    presetsAria: 'Open preset questions',
+    zoomKicker: 'Text size',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
   };
 }
 
@@ -2392,9 +2402,27 @@ function setChatbotLang(lang) {
   chatbotLang = lang;
   document.getElementById('chatbot-lang-en')?.classList.toggle('is-active', lang === 'en');
   document.getElementById('chatbot-lang-fil')?.classList.toggle('is-active', lang === 'fil');
+  const copy = chatbotCopy();
   const sub = document.getElementById('chatbot-sub');
-  if (sub) sub.textContent = chatbotCopy().subtitle;
+  if (sub) sub.textContent = copy.subtitle;
+  syncA11yCopy(copy);
   showChatbotMenu();
+}
+
+function syncA11yCopy(copy) {
+  const c = copy || chatbotCopy();
+  const presets = document.getElementById('preset-questions-label');
+  if (presets) presets.textContent = c.presets;
+  const presetsBtn = document.getElementById('preset-questions-toggle');
+  if (presetsBtn) presetsBtn.setAttribute('aria-label', c.presetsAria);
+  const kicker = document.getElementById('a11y-zoom-kicker');
+  if (kicker) kicker.textContent = c.zoomKicker;
+  const zoomIn = document.getElementById('a11y-zoom-in-label');
+  if (zoomIn) zoomIn.textContent = c.zoomIn;
+  const zoomOut = document.getElementById('a11y-zoom-out-label');
+  if (zoomOut) zoomOut.textContent = c.zoomOut;
+  document.getElementById('a11y-zoom-in')?.setAttribute('aria-label', c.zoomIn);
+  document.getElementById('a11y-zoom-out')?.setAttribute('aria-label', c.zoomOut);
 }
 
 function updateChatbotVisibility(view) {
@@ -2422,6 +2450,13 @@ function openChatbot() {
   }
 }
 
+function openPresetQuestions() {
+  chatbotStarted = true;
+  openChatbot();
+  showChatbotMenu();
+  document.getElementById('chatbot-choices')?.focus?.();
+}
+
 function closeChatbot() {
   const panel = document.getElementById('chatbot-panel');
   if (panel) panel.classList.remove('is-open');
@@ -2445,11 +2480,19 @@ function initChatbot() {
   const closeBtn = document.getElementById('chatbot-close');
   const langEn = document.getElementById('chatbot-lang-en');
   const langFil = document.getElementById('chatbot-lang-fil');
+  const presetsBtn = document.getElementById('preset-questions-toggle');
   if (openBtn) {
     openBtn.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
       toggleChatbot();
+    });
+  }
+  if (presetsBtn) {
+    presetsBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPresetQuestions();
     });
   }
   if (closeBtn) {
@@ -2461,6 +2504,7 @@ function initChatbot() {
   }
   if (langEn) langEn.addEventListener('click', () => setChatbotLang('en'));
   if (langFil) langFil.addEventListener('click', () => setChatbotLang('fil'));
+  syncA11yCopy();
   updateChatbotVisibility(
     document.getElementById('view-admin')?.classList.contains('active')
       ? 'admin'
@@ -2470,11 +2514,48 @@ function initChatbot() {
   );
 }
 
+const UI_ZOOM_MIN = 1;
+const UI_ZOOM_MAX = 1.5;
+const UI_ZOOM_STEP = 0.1;
+const UI_ZOOM_KEY = 'pharmalocate-ui-zoom';
+let uiZoom = 1;
+
+function refreshMapsAfterZoom() {
+  window.setTimeout(() => {
+    try { customerMap?.invalidateSize?.(); } catch (_) { /* map may be unmounted */ }
+    try { adminGeofenceMap?.invalidateSize?.(); } catch (_) { /* map may be unmounted */ }
+  }, 80);
+}
+
+function applyUiZoom(next) {
+  const rounded = Math.round(next * 10) / 10;
+  uiZoom = Math.min(UI_ZOOM_MAX, Math.max(UI_ZOOM_MIN, rounded));
+  document.documentElement.style.setProperty('--ui-zoom', String(uiZoom));
+  try { localStorage.setItem(UI_ZOOM_KEY, String(uiZoom)); } catch (_) { /* private mode */ }
+  const value = document.getElementById('a11y-zoom-value');
+  if (value) value.textContent = `${Math.round(uiZoom * 100)}%`;
+  const zoomIn = document.getElementById('a11y-zoom-in');
+  const zoomOut = document.getElementById('a11y-zoom-out');
+  if (zoomIn) zoomIn.disabled = uiZoom >= UI_ZOOM_MAX - 0.001;
+  if (zoomOut) zoomOut.disabled = uiZoom <= UI_ZOOM_MIN + 0.001;
+  refreshMapsAfterZoom();
+}
+
+function initA11yZoom() {
+  let stored = 1;
+  try { stored = Number.parseFloat(localStorage.getItem(UI_ZOOM_KEY) || '1'); } catch (_) { stored = 1; }
+  if (!Number.isFinite(stored)) stored = 1;
+  applyUiZoom(stored);
+  document.getElementById('a11y-zoom-in')?.addEventListener('click', () => applyUiZoom(uiZoom + UI_ZOOM_STEP));
+  document.getElementById('a11y-zoom-out')?.addEventListener('click', () => applyUiZoom(uiZoom - UI_ZOOM_STEP));
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     renderMeds(medicines);
     renderInquiries([]);
     initChatbot();
+    initA11yZoom();
     try {
       await Promise.race([
         initLiveData(),
