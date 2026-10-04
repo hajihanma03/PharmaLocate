@@ -30,26 +30,31 @@ class PharmacyController extends Controller
             $lng = (float) $lng;
 
             $activeGeofences = Geofence::where('is_active', true)->get();
+            $inServiceIds = collect();
 
             if ($activeGeofences->isNotEmpty()) {
                 $matchingGeofenceIds = $this->matchingGeofenceIds($activeGeofences, $lat, $lng);
-
-                if ($matchingGeofenceIds->isEmpty()) {
-                    return response()->json([]);
+                if ($matchingGeofenceIds->isNotEmpty()) {
+                    $inServiceIds = DB::table('geofence_pharmacy')
+                        ->whereIn('geofence_id', $matchingGeofenceIds)
+                        ->pluck('pharmacy_id')
+                        ->map(fn ($id) => (int) $id)
+                        ->unique();
                 }
 
-                $allowedPharmacyIds = DB::table('geofence_pharmacy')
-                    ->whereIn('geofence_id', $matchingGeofenceIds)
+                $visibleIds = DB::table('geofence_pharmacy')
+                    ->whereIn('geofence_id', $activeGeofences->pluck('id'))
                     ->pluck('pharmacy_id')
+                    ->map(fn ($id) => (int) $id)
                     ->unique();
 
-                $pharmacies = $pharmacies->whereIn('id', $allowedPharmacyIds)->values();
+                $pharmacies = $pharmacies->whereIn('id', $visibleIds)->values();
             }
 
             $tile38Distances = $this->tile38->pharmacyDistancesKm($lat, $lng);
 
             $pharmacies = $pharmacies
-                ->map(function (Pharmacy $pharmacy) use ($lat, $lng, $tile38Distances) {
+                ->map(function (Pharmacy $pharmacy) use ($lat, $lng, $tile38Distances, $inServiceIds) {
                     if ($tile38Distances !== null && isset($tile38Distances[$pharmacy->id])) {
                         $pharmacy->distance_km = $tile38Distances[$pharmacy->id];
                     } else {
@@ -60,6 +65,8 @@ class PharmacyController extends Controller
                             (float) $pharmacy->longitude,
                         ), 2);
                     }
+
+                    $pharmacy->in_service_area = $inServiceIds->contains((int) $pharmacy->id);
 
                     return $pharmacy;
                 })

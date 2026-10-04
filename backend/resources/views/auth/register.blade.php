@@ -43,10 +43,31 @@
           <label>Confirm password</label>
           <input type="password" name="password_confirmation" placeholder="Re-enter your password" />
         </div>
+        <div class="terms-panel">
+          <div class="terms-panel-title">Terms of Service and User Agreement</div>
+          <div class="terms-scroll">{{ file_get_contents(public_path('terms-and-agreement.txt')) }}</div>
+          <label class="terms-agree" for="accepted_terms">
+            <input type="checkbox" id="accepted_terms" name="accepted_terms" value="1" {{ old('accepted_terms') ? 'checked' : '' }} required />
+            <span>I have read and agree to the Terms of Service and User Agreement.</span>
+          </label>
+        </div>
+        <p class="text-sm" style="margin:0 0 12px; color:var(--text-2);">Use an inbox you can open. The account is created only after a confirmation code is sent to that address.</p>
         <button type="submit" class="btn btn-primary btn-full">
           <i class="ti ti-user-check"></i> Create account
         </button>
       </form>
+
+      @if (session('signup_email'))
+        <form method="POST" action="{{ route('register.confirm') }}" style="margin-top:16px;">
+          @csrf
+          <input type="hidden" name="email" value="{{ session('signup_email') }}" />
+          <div class="form-group">
+            <label>Confirmation code</label>
+            <input type="text" name="code" inputmode="numeric" maxlength="6" placeholder="6-digit code" />
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">Confirm and create account</button>
+        </form>
+      @endif
 
       <div class="auth-footer">
         <a href="{{ route('home') }}">&larr; Browse as guest without an account</a>

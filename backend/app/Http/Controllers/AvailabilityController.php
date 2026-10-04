@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Setting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -45,6 +46,7 @@ class AvailabilityController extends Controller
         }
 
         $rows = $query->get()->map(function ($row) {
+            $row->availability_status = Setting::statusForQuantity((int) $row->qty);
             $row->status = match ($row->availability_status) {
                 'low' => 'low',
                 'out_of_stock' => 'out',

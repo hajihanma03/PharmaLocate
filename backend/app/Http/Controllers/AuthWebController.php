@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
+use App\Services\SignupVerification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -36,6 +36,16 @@ class AuthWebController extends Controller
             ]);
         }
 
+        if (! $request->user()?->is_active) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            throw ValidationException::withMessages([
+                'login' => 'This account has been deactivated. Contact an administrator.',
+            ]);
+        }
+
         $request->session()->regenerate();
 
         return redirect()->intended(route('home'));
@@ -46,23 +56,29 @@ class AuthWebController extends Controller
         return view('auth.register');
     }
 
-    public function register(Request $request): RedirectResponse
+    public function register(Request $request, SignupVerification $signup): RedirectResponse
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'username' => ['nullable', 'string', 'max:255', 'unique:users,username'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'email:rfc', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'accepted_terms' => ['accepted'],
         ]);
 
-        $user = User::create([
-            'name' => $data['name'],
-            'username' => $data['username'] ?? null,
-            'email' => $data['email'],
-            'password' => $data['password'],
-            'role' => 'customer',
+        $signup->begin($data);
+
+        return back()->with('signup_email', strtolower($data['email']));
+    }
+
+    public function confirmRegister(Request $request, SignupVerification $signup): RedirectResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email:rfc', 'max:255'],
+            'code' => ['required', 'digits:6'],
         ]);
 
+        $user = $signup->confirm($data['email'], $data['code']);
         Auth::login($user);
         $request->session()->regenerate();
 

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Geofence;
 use App\Models\Inquiry;
-use App\Models\Medicine;
 use App\Models\Pharmacy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,9 +12,9 @@ use Illuminate\View\View;
 class PageController extends Controller
 {
     // Default map center — Tarlac Provincial Hospital vicinity.
-    private const HOSPITAL_LAT = 15.4870;
+    private const HOSPITAL_LAT = 15.47474;
 
-    private const HOSPITAL_LNG = 120.5960;
+    private const HOSPITAL_LNG = 120.58669;
 
     public function home(): View
     {
@@ -80,28 +79,17 @@ class PageController extends Controller
     public function storeInquiry(Request $request)
     {
         $data = $request->validate([
-            'medicine_name' => ['required', 'string', 'max:255'],
             'pharmacy_id' => ['nullable', 'exists:pharmacies,id'],
-            'category' => ['nullable', 'string', 'max:255'],
             'message' => ['required', 'string', 'max:2000'],
         ]);
 
         $user = auth()->user();
 
-        // Try to link to a known medicine by name (optional).
-        $medicine = Medicine::where('name', 'like', '%'.$data['medicine_name'].'%')->first();
-
-        $message = $data['medicine_name'];
-        if (! empty($data['category'])) {
-            $message .= ' ('.$data['category'].')';
-        }
-        $message .= ': '.$data['message'];
-
         Inquiry::create([
             'user_id' => $user->id,
             'pharmacy_id' => $data['pharmacy_id'] ?? null,
-            'medicine_id' => $medicine?->id,
-            'message' => $message,
+            'medicine_id' => null,
+            'message' => $data['message'],
             'status' => 'pending',
         ]);
 

@@ -1,4 +1,4 @@
-/** PharmaLocate frontend — demo data + live API when served from Laravel */
+/** PharmaLocate frontend — database catalog when served from Laravel; demo catalog only for a local file open */
 
 const DEMO_MEDICINES = [
   { name: 'Paracetamol 500mg', type: 'Pain / Fever relief', pharmacy: 'SpaRx Pharmacy', qty: 250, status: 'available' },
@@ -17,7 +17,7 @@ const API_BASE = location.protocol.startsWith('http') ? '/api' : null;
 const TOKEN_KEY = 'ph_token';
 const USER_KEY = 'ph_user';
 const GEOFENCE_ZONE_COLORS = ['#1D9E75', '#378ADD', '#854d0e'];
-const TARLAC_CENTER = { lat: 15.487, lng: 120.596 };
+const TARLAC_CENTER = { lat: 15.47474, lng: 120.58669 };
 
 let customerMap = null;
 let customerMapMarkers = {};
@@ -26,7 +26,7 @@ let customerGeofences = [];
 let userLocation = { ...TARLAC_CENTER, fromGps: false };
 let selectedPharmacyId = null;
 
-let medicines = normalizeMedicines(DEMO_MEDICINES);
+let medicines = isLiveMode() ? [] : normalizeMedicines(DEMO_MEDICINES);
 let pharmacies = [];
 let adminInquiries = [];
 let adminPharmacies = [];
@@ -34,6 +34,12 @@ let adminGeofences = [];
 let selectedAdminGeofenceId = null;
 let adminGeofenceMap = null;
 let adminGeofenceMapLayers = [];
+let adminPharmacyDraft = null;
+let adminStartingDraft = null;
+let pendingPharmacyName = null;
+let reassignQueue = [];
+let pendingNestPharmacy = null;
+let insideStartingPointId = null;
 let selectedAdminInquiryId = null;
 let posCart = [];
 let posProducts = [];
@@ -54,11 +60,41 @@ let apiToken = localStorage.getItem(TOKEN_KEY);
 let currentUser = readStoredUser();
 
 function isStaffOrAdmin() {
-  return currentUser && (currentUser.role === 'admin' || currentUser.role === 'staff');
+  return currentUser && (currentUser.role === 'admin' || currentUser.role === 'staff' || currentUser.role === 'owner');
 }
 
 function isAdminUser() {
   return currentUser?.role === 'admin';
+}
+
+function isOwnerUser() {
+  return currentUser?.role === 'owner';
+}
+
+function isPharmacyScopedUser() {
+  return currentUser?.role === 'staff' || currentUser?.role === 'owner';
+}
+
+function accountTierLabel(user) {
+  if (!user) return 'Account';
+  if (user.role === 'admin') return 'Admin';
+  if (user.role === 'staff') return 'Staff';
+  if (user.role === 'customer') return 'Customer';
+  if (user.role === 'owner') {
+    const pharmacy = String(user.pharmacy?.name || (typeof user.pharmacy === 'string' ? user.pharmacy : '') || '');
+    if (/magic\s*8/i.test(pharmacy)) return 'Magic 8 Owner';
+    if (/sparx/i.test(pharmacy)) return 'SpaRx Owner';
+    return 'Pharmacy owner';
+  }
+  return 'Customer';
+}
+
+function ownerTierValue(user) {
+  if (user?.role !== 'owner') return '';
+  const pharmacy = String(user.pharmacy?.name || (typeof user.pharmacy === 'string' ? user.pharmacy : '') || '');
+  if (/magic\s*8/i.test(pharmacy)) return 'magic8_owner';
+  if (/sparx/i.test(pharmacy)) return 'sparx_owner';
+  return '';
 }
 
 function isLiveMode() {
@@ -177,7 +213,7 @@ function medicineCardHtml(m) {
         </div>
         <div class="med-name">${escapeHtml(m.name)}</div>
         <div class="med-type">${escapeHtml(m.type || '')}</div>
-        <div class="med-pharmacy"><i class="ti ti-building-store" aria-hidden="true"></i> ${escapeHtml(m.pharmacy || '')}</div>
+        <div class="med-pharmacy ${pharmacyToneClass(m.pharmacy_id)}"><i class="ti ti-building-store" aria-hidden="true"></i> <span>${escapeHtml(m.pharmacy || '')}</span></div>
       </div>`;
 }
 
@@ -200,19 +236,29 @@ function renderHomePreview() {
     : '<div class="text-muted text-sm">No medicines listed yet.</div>';
 }
 
-function filterMeds(q) {
-  const f = (q || '').toLowerCase();
-  renderMeds(medicines.filter(m => m.name.toLowerCase().includes(f) || (m.type || '').toLowerCase().includes(f)));
+function pharmacyToneClass(pharmacyId) {
+  const tones = ['tone-a', 'tone-b', 'tone-c'];
+  const id = Number(pharmacyId);
+  if (!Number.isFinite(id)) return 'tone-a';
+  return tones[Math.abs(id) % tones.length];
 }
 
-function filterMedsByPharmacy(pharmacyId) {
-  if (!pharmacyId) {
-    renderMeds(medicines);
-    return;
-  }
-  renderMeds(medicines.filter(m =>
-    String(m.pharmacy_id) === String(pharmacyId) || String(m.pharmacy) === String(pharmacyId),
-  ));
+function applyMedicineFilters() {
+  const query = (document.getElementById('med-search')?.value || '').toLowerCase();
+  const pharmacyId = document.getElementById('med-pharmacy-filter')?.value || '';
+  renderMeds(medicines.filter((m) => {
+    const matchesText = !query || m.name.toLowerCase().includes(query) || (m.type || '').toLowerCase().includes(query);
+    const matchesPharmacy = !pharmacyId || String(m.pharmacy_id) === String(pharmacyId);
+    return matchesText && matchesPharmacy;
+  }));
+}
+
+function filterMeds() {
+  applyMedicineFilters();
+}
+
+function filterMedsByPharmacy() {
+  applyMedicineFilters();
 }
 
 function haversineKm(lat1, lng1, lat2, lng2) {
@@ -288,8 +334,51 @@ function fillPharmacySelects(list) {
     medFilter.innerHTML = `<option value="">All pharmacies</option>${options}`;
   }
   if (inqSelect) {
-    inqSelect.innerHTML = `<option value="">Any pharmacy</option>${options}`;
+    inqSelect.innerHTML = `<option value="">Select a pharmacy…</option>${options}`;
   }
+  fillMedicineSuggestions();
+}
+
+function fillMedicineSuggestions() {
+  const list = document.getElementById('medicine-suggestions');
+  if (!list) return;
+  const names = [...new Set(medicines.map(m => m.name).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  list.innerHTML = names.map(name => `<option value="${escapeHtml(name)}"></option>`).join('');
+}
+
+let catalogReload = null;
+
+async function reloadPublicCatalog() {
+  if (!isLiveMode()) return;
+  if (catalogReload) return catalogReload;
+
+  catalogReload = (async () => {
+    const loc = userLocation;
+    const [availability, pharmList, geofenceList] = await Promise.all([
+      apiFetch(`/availability`, { timeoutMs: 8000 }),
+      apiFetch(`/pharmacies?lat=${loc.lat}&lng=${loc.lng}`, { timeoutMs: 8000 }),
+      fetchPublicGeofences(),
+    ]);
+
+    medicines = normalizeMedicines(Array.isArray(availability) ? availability : []);
+    pharmacies = Array.isArray(pharmList) ? pharmList : [];
+    customerGeofences = Array.isArray(geofenceList) ? geofenceList : [];
+    if (!pharmacies.some(p => p.id === selectedPharmacyId)) {
+      selectedPharmacyId = pharmacies[0]?.id ?? null;
+    }
+
+    renderPharmacyList(pharmacies);
+    fillPharmacySelects(pharmacies);
+    applyMedicineFilters();
+    updateGeofenceNotice();
+    updateGeofenceParams();
+    updatePharmacyMapOverlay();
+    if (customerMap) renderCustomerMapLayers();
+  })().finally(() => {
+    catalogReload = null;
+  });
+
+  return catalogReload;
 }
 
 function renderInquiries(list) {
@@ -306,12 +395,19 @@ function renderInquiries(list) {
     return;
   }
 
-  panel.innerHTML = list.map(inq => {
+  const mine = list.filter(inq => Number(inq.user_id) === Number(currentUser.id));
+  if (!mine.length) {
+    panel.innerHTML = '<div class="text-muted text-sm" style="padding:12px;">No inquiries yet. Choose a pharmacy and submit one using the form.</div>';
+    return;
+  }
+
+  panel.innerHTML = mine.map(inq => {
     const statusClass = inq.status === 'resolved' ? 'badge-green' : inq.status === 'pending' ? 'badge-amber' : 'badge-gray';
     const statusLabel = inq.status === 'resolved' ? 'Replied' : inq.status === 'pending' ? 'Pending' : inq.status;
     const med = inq.medicine?.name || 'General inquiry';
-    const pharm = inq.pharmacy?.name || 'Any pharmacy';
-    const reply = inq.response ? `<div class="inq-reply">${escapeHtml(inq.response)}</div>` : '';
+    const pharm = inq.pharmacy?.name || 'Pharmacy';
+    const question = inq.message ? `<div class="inq-meta">${escapeHtml(inq.message)}</div>` : '';
+    const reply = inq.response ? `<div class="inq-reply"><span class="inq-reply-label">Pharmacy reply</span><span class="inq-reply-text">${escapeHtml(inq.response)}</span></div>` : '';
     return `
       <div class="inq-item">
         <div class="inq-item-top">
@@ -321,6 +417,7 @@ function renderInquiries(list) {
         <div class="inq-meta">
           <span class="badge badge-gray text-xs">${escapeHtml(pharm)}</span>
         </div>
+        ${question}
         ${reply}
       </div>`;
   }).join('');
@@ -332,7 +429,7 @@ function updateNavForUser() {
   const initials = userInitials(currentUser.name || displayName());
   const label = displayName();
   navAuth.innerHTML = `
-    <button class="btn btn-sm btn-ghost" onclick="logoutUser()"><i class="ti ti-logout"></i> Log out</button>
+    <button class="btn btn-sm btn-ghost nav-compact" onclick="logoutUser()"><i class="ti ti-logout"></i> Log out</button>
     <div class="nav-user">
       <div class="nav-user-avatar">${escapeHtml(initials)}</div>
       <span class="nav-user-name">${escapeHtml(label)}</span>
@@ -343,9 +440,9 @@ function updateAdminNav() {
   const navAuth = document.getElementById('nav-auth');
   if (!navAuth || !currentUser) return;
   const initials = userInitials(currentUser.name || displayName());
-  const roleLabel = currentUser.role === 'admin' ? 'Admin' : 'Staff';
+  const roleLabel = accountTierLabel(currentUser);
   navAuth.innerHTML = `
-    <button class="btn btn-sm btn-ghost" onclick="logoutUser()"><i class="ti ti-logout"></i> Log out</button>
+    <button class="btn btn-sm btn-ghost nav-compact" onclick="logoutUser()"><i class="ti ti-logout"></i> Log out</button>
     <div class="nav-user">
       <div class="nav-user-avatar">${escapeHtml(initials)}</div>
       <span class="nav-user-name">${escapeHtml(roleLabel)}</span>
@@ -389,8 +486,8 @@ function switchView(v) {
     document.getElementById('view-guest').classList.add('active');
     navTabs.style.display = 'flex';
     navAuth.innerHTML = `
-      <button class="btn btn-ghost btn-sm" onclick="switchView('auth')"><i class="ti ti-login"></i> Log in</button>
-      <button class="btn btn-primary btn-sm" onclick="switchView('auth')"><i class="ti ti-user-plus"></i> Sign up</button>`;
+      <button class="btn btn-ghost btn-sm nav-compact" onclick="switchView('auth')"><i class="ti ti-login"></i> Log in</button>
+      <button class="btn btn-primary btn-sm nav-compact" onclick="switchView('auth')"><i class="ti ti-user-plus"></i> Sign up</button>`;
   } else if (v === 'user') {
     document.getElementById('view-guest').classList.add('active');
     navTabs.style.display = 'flex';
@@ -446,8 +543,11 @@ function switchTab(t) {
   });
   currentGuestTab = t;
 
-  if (t === 'medicines') renderMeds(medicines);
+  if (t === 'medicines') applyMedicineFilters();
   if (t === 'inquiries' && currentUser && isLiveMode()) loadInquiries();
+  if (isLiveMode() && (t === 'home' || t === 'medicines' || t === 'pharmacies')) {
+    reloadPublicCatalog().catch(() => { /* keep the last successful catalog */ });
+  }
   if (t === 'pharmacies') {
     updateGeofenceNotice();
     if (isLiveMode()) {
@@ -536,18 +636,45 @@ function renderCustomerMapLayers() {
 
   const bounds = [];
 
+  const preferred = pharmacies.find(p => p.id === selectedPharmacyId) || pharmacies[0];
+
   pharmacies.forEach(p => {
     if (p.latitude == null || p.longitude == null) return;
+    const selected = preferred && p.id === preferred.id;
     const dist = p.distance_km != null ? `~${p.distance_km} km` : '';
-    const marker = L.marker([p.latitude, p.longitude]).addTo(customerMap)
-      .bindPopup(`<strong>${escapeHtml(p.name)}</strong><br>${escapeHtml(p.address || '')}${dist ? `<br>${dist}` : ''}`);
+    const marker = L.marker([p.latitude, p.longitude], {
+      icon: pharmacyPinIcon(selected),
+      zIndexOffset: selected ? 500 : 0,
+    }).addTo(customerMap)
+      .bindPopup(`<strong>${escapeHtml(p.name)}</strong><br>${escapeHtml(p.address || '')}${dist ? `<br>${dist}` : ''}<br><span>Directions start at ${escapeHtml(directionsOriginFor(p).name)}</span>`);
     marker.on('click', () => selectPharmacyFromList(p.id));
     customerMapMarkers[p.id] = marker;
     customerMapLayers.push(marker);
     bounds.push([p.latitude, p.longitude]);
   });
 
+  const guideOrigin = directionsOriginFor(preferred);
+  if (preferred?.latitude != null && preferred?.longitude != null) {
+    const guide = L.polyline(
+      [[guideOrigin.lat, guideOrigin.lng], [preferred.latitude, preferred.longitude]],
+      { color: '#0F6E56', weight: 3, opacity: 0.85, dashArray: '8,7' },
+    ).addTo(customerMap);
+    customerMapLayers.push(guide);
+    const originAway = haversineKm(guideOrigin.lat, guideOrigin.lng, userLocation.lat, userLocation.lng) > 0.03;
+    if (originAway) {
+      const originMarker = L.circleMarker([guideOrigin.lat, guideOrigin.lng], {
+        radius: 7,
+        color: '#fff',
+        weight: 2,
+        fillColor: '#185FA5',
+        fillOpacity: 1,
+      }).addTo(customerMap).bindTooltip(`Directions start: ${guideOrigin.name}`);
+      customerMapLayers.push(originMarker);
+    }
+  }
+
   bounds.push([userLocation.lat, userLocation.lng]);
+  bounds.push([guideOrigin.lat, guideOrigin.lng]);
 
   if (bounds.length > 1) {
     customerMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
@@ -563,6 +690,30 @@ function renderCustomerMapLayers() {
   }
 }
 
+function pharmacyPinIcon(selected) {
+  return L.divIcon({
+    className: `pharmacy-pin${selected ? ' is-selected' : ''}`,
+    html: '<span class="pharmacy-pin-dot"></span>',
+    iconSize: [22, 22],
+    iconAnchor: [11, 20],
+    popupAnchor: [0, -18],
+  });
+}
+
+function preferredPharmacy() {
+  return pharmacies.find(p => p.id === selectedPharmacyId) || pharmacies[0] || null;
+}
+
+function zoneForPreferredPharmacy() {
+  const pharmacy = preferredPharmacy();
+  if (!pharmacy) return customerGeofences[0] || null;
+  const zones = customerGeofences.filter(g =>
+    (g.pharmacies || []).some(p => Number(p.id) === Number(pharmacy.id)),
+  );
+  if (!zones.length) return customerGeofences[0] || null;
+  return [...zones].sort((a, b) => Number(a.radius_meters) - Number(b.radius_meters))[0];
+}
+
 function updateGeofenceNotice() {
   const el = document.getElementById('geofence-notice-text');
   if (!el) return;
@@ -575,16 +726,20 @@ function updateGeofenceNotice() {
   const matching = getMatchingGeofences();
 
   if (matching.length) {
-    const zone = matching[0];
-    const km = zone.radius_meters / 1000;
-    const kmLabel = Number.isInteger(km) ? km : km.toFixed(1);
+    const zone = [...matching].sort((a, b) => Number(a.radius_meters) - Number(b.radius_meters))[0];
     const count = pharmacies.length;
-    el.innerHTML = `Inside <strong style="margin:0 3px;">${escapeHtml(zone.name)}</strong> (${kmLabel} km) — showing ${count} assigned ${count === 1 ? 'pharmacy' : 'pharmacies'}`;
+    el.innerHTML = `Inside <strong style="margin:0 3px;">${escapeHtml(zone.name)}</strong> (${formatRadiusKm(zone.radius_meters)}) — showing ${count} assigned ${count === 1 ? 'pharmacy' : 'pharmacies'}`;
+    return;
+  }
+
+  if (customerGeofences.length && pharmacies.length) {
+    const count = pharmacies.length;
+    el.innerHTML = `You are outside the service area. ${count} pharmacy ${count === 1 ? 'pin is' : 'pins are'} on the map. Select one to get directions.`;
     return;
   }
 
   if (customerGeofences.length) {
-    el.textContent = 'You are outside all active service geofences. No pharmacies to show.';
+    el.textContent = 'You are outside all active service geofences. No pharmacy locations are set yet.';
     return;
   }
 
@@ -594,20 +749,30 @@ function updateGeofenceNotice() {
 function updateGeofenceParams() {
   const grid = document.getElementById('geofence-params-grid');
   if (!grid) return;
-  const zone = customerGeofences[0];
-  const centerLat = zone?.center_latitude ?? TARLAC_CENTER.lat;
-  const centerLng = zone?.center_longitude ?? TARLAC_CENTER.lng;
+  const pharmacy = preferredPharmacy();
+  const zone = zoneForPreferredPharmacy();
+  const centerLat = pharmacy?.latitude ?? zone?.center_latitude ?? TARLAC_CENTER.lat;
+  const centerLng = pharmacy?.longitude ?? zone?.center_longitude ?? TARLAC_CENTER.lng;
   const radius = zone?.radius_meters ?? 5000;
   const km = radius / 1000;
   const kmLabel = Number.isInteger(km) ? `${km} km` : `${km.toFixed(1)} km`;
   const name = zone?.name || 'Tarlac Provincial Hospital Zone';
+  const pharmacyName = pharmacy?.name || 'None selected';
   grid.innerHTML = `
+    <div>Preferred pharmacy: ${escapeHtml(pharmacyName)}</div>
     <div>Zone: ${escapeHtml(name)}</div>
-    <div>Shape: circular (haversine / optional Tile38)</div>
-    <div>Center: ${Number(centerLat).toFixed(4)}, ${Number(centerLng).toFixed(4)}</div>
+    <div>Pharmacy pin: ${Number(centerLat).toFixed(4)}, ${Number(centerLng).toFixed(4)}</div>
     <div>Radius: ${radius.toLocaleString()} m (${kmLabel})</div>
-    <div>Allowed admin range: 500–10,000 m</div>
-    <div>Excluded: pharmacies inside TPH</div>`;
+    <div>Shape: circular (haversine / optional Tile38)</div>
+    <div>Directions start at ${escapeHtml(directionsOriginFor(pharmacy).name)}</div>`;
+  updateDirectionsButton(pharmacy);
+}
+
+function updateDirectionsButton(pharmacy) {
+  const btn = document.getElementById('pharmacy-directions-btn');
+  if (!btn) return;
+  const origin = directionsOriginFor(pharmacy || preferredPharmacy());
+  btn.innerHTML = `<i class="ti ti-navigation"></i> Get directions from ${escapeHtml(origin.name)}`;
 }
 
 function updatePharmacyMapOverlay() {
@@ -624,11 +789,12 @@ function selectPharmacyFromList(id) {
   document.querySelectorAll('.pharmacy-item').forEach(el => {
     el.classList.toggle('active', String(el.dataset.pharmacyId) === String(id));
   });
+  updateGeofenceParams();
 
   const p = pharmacies.find(x => x.id === id);
   if (!p || !customerMap || p.latitude == null || p.longitude == null) return;
 
-  customerMap.setView([p.latitude, p.longitude], 16);
+  renderCustomerMapLayers();
   customerMapMarkers[id]?.openPopup();
 }
 
@@ -638,13 +804,16 @@ function openPharmacyDirections() {
     alert('Select a pharmacy with map coordinates first.');
     return;
   }
+  const originPoint = directionsOriginFor(p);
+  const origin = `${originPoint.lat},${originPoint.lng}`;
   window.open(
-    `https://www.google.com/maps/dir/?api=1&destination=${p.latitude},${p.longitude}`,
+    `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${p.latitude},${p.longitude}`,
     '_blank',
   );
 }
 
 function switchAdminSection(s) {
+  if (s === 'users' && !isAdminUser()) s = 'dashboard';
   document.querySelectorAll('.admin-section').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
   const sec = document.getElementById('admin-' + s);
@@ -686,7 +855,27 @@ function toggleAuthMode(mode) {
   const signupForm = document.getElementById('auth-signup-form');
   loginForm?.classList.toggle('hidden', mode !== 'login');
   signupForm?.classList.toggle('hidden', mode !== 'signup');
+  if (mode === 'signup') loadSignupTerms();
   replayEnter(mode === 'login' ? loginForm : signupForm);
+}
+
+function syncSignupTerms() {
+  const agree = document.getElementById('signup-terms-agree');
+  const btn = document.getElementById('signup-submit-btn');
+  if (btn) btn.disabled = !agree?.checked;
+}
+
+async function loadSignupTerms() {
+  const box = document.getElementById('signup-terms');
+  if (!box || box.dataset.loaded === '1') return;
+  try {
+    const res = await fetch('terms-and-agreement.txt');
+    if (!res.ok) throw new Error('Terms file missing');
+    box.textContent = await res.text();
+    box.dataset.loaded = '1';
+  } catch (_) {
+    box.textContent = 'The terms could not be loaded. Refresh the page before creating an account.';
+  }
 }
 
 async function loginUser(event) {
@@ -727,6 +916,7 @@ async function loginUser(event) {
       switchView('user');
       await loadInquiries();
     }
+    maybeOfferGuide();
   } catch (err) {
     alert(err.message);
   } finally {
@@ -748,6 +938,10 @@ async function registerUser(event) {
     alert('Password must be at least 8 characters.');
     return;
   }
+  if (!document.getElementById('signup-terms-agree')?.checked) {
+    alert('Please read and agree to the Terms of Service before creating an account.');
+    return;
+  }
 
   if (!isLiveMode()) {
     saveSession({ name: username, username, email, role: 'customer' }, 'demo');
@@ -756,6 +950,8 @@ async function registerUser(event) {
     return;
   }
 
+  const btn = document.getElementById('signup-submit-btn');
+  if (btn) btn.disabled = true;
   try {
     const data = await apiFetch('/register', {
       method: 'POST',
@@ -764,13 +960,70 @@ async function registerUser(event) {
         username,
         email,
         password,
+        accepted_terms: true,
       }),
     });
+    if (data.verification_required) {
+      showSignupCodeStep(email);
+      return;
+    }
     saveSession(data.user || data, data.token);
     switchView('user');
     await loadInquiries();
   } catch (err) {
     alert(err.message);
+  } finally {
+    const waitingForCode = document.getElementById('signup-verify') && !document.getElementById('signup-verify').classList.contains('hidden');
+    if (btn) {
+      btn.disabled = waitingForCode ? true : !document.getElementById('signup-terms-agree')?.checked;
+      btn.classList.toggle('hidden', Boolean(waitingForCode));
+    }
+  }
+}
+
+function showSignupCodeStep(email) {
+  const note = document.getElementById('signup-verify-note');
+  if (note) {
+    note.textContent = `A 6-digit code was sent to ${email}. Enter it below to create the account. Check the spam folder if it is not in the inbox.`;
+  }
+  document.getElementById('signup-submit-btn')?.classList.add('hidden');
+  document.getElementById('signup-verify')?.classList.remove('hidden');
+  document.getElementById('signup-code')?.focus();
+}
+
+async function resendSignupCode() {
+  const btn = document.getElementById('signup-resend-btn');
+  if (btn) btn.disabled = true;
+  try {
+    await registerUser({ preventDefault() {} });
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function confirmSignup() {
+  const email = document.getElementById('signup-email')?.value.trim();
+  const code = document.getElementById('signup-code')?.value.trim();
+  if (!email || !code) {
+    alert('Enter the 6-digit code sent to your email.');
+    return;
+  }
+
+  const btn = document.getElementById('signup-confirm-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const data = await apiFetch('/register/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    });
+    saveSession(data.user || data, data.token);
+    switchView('user');
+    await loadInquiries();
+    maybeOfferGuide();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -797,18 +1050,14 @@ async function loadInquiries() {
   }
 }
 
-function findMedicineId(name) {
-  if (!name) return null;
-  const match = medicines.find(m => m.name.toLowerCase() === name.toLowerCase());
-  return match?.medicine_id || null;
-}
-
 async function submitInquiryDemo() {
-  const medicineName = document.getElementById('inq-medicine')?.value.trim();
   const pharmacyId = document.getElementById('inq-pharmacy')?.value;
-  const category = document.getElementById('inq-category')?.value;
   const message = document.getElementById('inq-message')?.value.trim();
 
+  if (!pharmacyId) {
+    alert('Choose the pharmacy you want to ask.');
+    return;
+  }
   if (!message) {
     alert('Please enter a message for your inquiry.');
     return;
@@ -825,15 +1074,12 @@ async function submitInquiryDemo() {
     return;
   }
 
-  const fullMessage = [category && `Category: ${category}`, medicineName && `Medicine: ${medicineName}`, message].filter(Boolean).join('\n');
-
   try {
     await apiFetch('/inquiries', {
       method: 'POST',
       body: JSON.stringify({
-        pharmacy_id: pharmacyId ? Number(pharmacyId) : null,
-        medicine_id: findMedicineId(medicineName),
-        message: fullMessage,
+        pharmacy_id: Number(pharmacyId),
+        message,
       }),
     });
     alert('Inquiry submitted successfully.');
@@ -852,23 +1098,7 @@ async function initLiveData() {
     if (!health.ok) throw new Error('API unavailable');
 
     userLocation = { ...TARLAC_CENTER, fromGps: false };
-
-    const [availability, pharmList, geofenceList] = await Promise.all([
-      apiFetch('/availability', { timeoutMs: 5000 }),
-      apiFetch(`/pharmacies?lat=${TARLAC_CENTER.lat}&lng=${TARLAC_CENTER.lng}`, { timeoutMs: 5000 }),
-      fetchPublicGeofences(),
-    ]);
-
-    if (availability.length) medicines = normalizeMedicines(availability);
-    pharmacies = pharmList;
-    customerGeofences = geofenceList;
-    selectedPharmacyId = pharmacies[0]?.id ?? null;
-    renderPharmacyList(pharmacies);
-    fillPharmacySelects(pharmacies);
-    renderMeds(medicines);
-    updateGeofenceNotice();
-    updateGeofenceParams();
-    updatePharmacyMapOverlay();
+    await reloadPublicCatalog();
 
     if (apiToken && apiToken !== 'demo') {
       try {
@@ -888,9 +1118,16 @@ async function initLiveData() {
 
     refreshLocationInBackground();
   } catch (err) {
-    console.warn('Using demo data — API not reachable:', err.message);
-    medicines = normalizeMedicines(DEMO_MEDICINES);
-    renderMeds(medicines);
+    console.warn('Live data could not be loaded:', err.message);
+    medicines = [];
+    pharmacies = [];
+    customerGeofences = [];
+    applyMedicineFilters();
+    renderPharmacyList(pharmacies);
+    const notice = document.getElementById('geofence-notice-text');
+    if (notice) notice.textContent = 'Live data could not be loaded. Confirm MySQL is running, then refresh this page.';
+    const preview = document.getElementById('home-med-preview');
+    if (preview) preview.innerHTML = '<div class="text-muted text-sm">Medicines could not be loaded from the database.</div>';
   }
 }
 
@@ -940,6 +1177,7 @@ async function loadAdminDashboard() {
     setText('dash-sales-today', `₱${Number(data.sales_today).toFixed(2)}`);
     setText('dash-geofences-active', data.geofences.active);
     setText('dash-assigned-pharmacies', data.geofences.assigned_pharmacies);
+    setText('dash-coverage-radius', formatCoverageRadius(data.geofences.radius_min_meters, data.geofences.radius_max_meters));
     setText('dash-users-total', data.users.registered);
     setText('admin-pending-badge', data.pending_inquiries);
     setText('admin-inq-header-badge', `${data.pending_inquiries} pending`);
@@ -998,37 +1236,132 @@ async function loadAdminInquiries() {
   }
 }
 
+function inquiryIsReplied(inq) {
+  return inq?.status === 'resolved' && String(inq.response || '').trim() !== '';
+}
+
+function formatInquiryWhen(iso) {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function repliedInquiryGroups() {
+  const groups = new Map();
+
+  adminInquiries.forEach((inq) => {
+    if (!inquiryIsReplied(inq)) return;
+    const id = inq.pharmacy_id || inq.pharmacy?.id || 0;
+    const key = String(id);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id,
+        name: inq.pharmacy?.name || (id ? 'Pharmacy' : 'No pharmacy selected'),
+        items: [],
+      });
+    }
+    groups.get(key).items.push(inq);
+  });
+
+  return [...groups.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
 function renderAdminInquiries() {
   const tbody = document.getElementById('admin-inq-table-body');
   if (!tbody) return;
 
-  if (!adminInquiries.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-sm" style="padding:16px;">No inquiries yet.</td></tr>';
+  const waiting = adminInquiries.filter((inq) => !inquiryIsReplied(inq));
+
+  if (!waiting.length) {
+    const empty = isPharmacyScopedUser()
+      ? 'No inquiries waiting for a reply at your pharmacy.'
+      : 'No inquiries waiting for a reply.';
+    tbody.innerHTML = `<tr><td colspan="5" class="text-muted text-sm" style="padding:16px;">${empty}</td></tr>`;
+  } else {
+    tbody.innerHTML = waiting.map(inq => {
+      const [badgeClass, badgeLabel] = inquiryStatusBadge(inq.status);
+      const initials = userInitials(inq.user?.name);
+      const med = inq.medicine?.name || 'General';
+      const pharm = inq.pharmacy?.name || '—';
+      return `
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--green-700);">${initials}</div>
+              ${escapeHtml(inq.user?.name || 'Customer')}
+            </div>
+          </td>
+          <td>${escapeHtml(med)}</td>
+          <td>${escapeHtml(pharm)}</td>
+          <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
+          <td><button class="btn btn-xs btn-primary" type="button" onclick="selectAdminInquiry(${inq.id})"><i class="ti ti-send"></i> Reply</button></td>
+        </tr>`;
+    }).join('');
+  }
+
+  renderRepliedInquiryHistory();
+}
+
+function renderRepliedInquiryHistory() {
+  const host = document.getElementById('admin-inquiry-history');
+  if (!host) return;
+
+  const groups = repliedInquiryGroups();
+  if (!groups.length) {
+    host.replaceChildren();
     return;
   }
 
-  tbody.innerHTML = adminInquiries.map(inq => {
-    const [badgeClass, badgeLabel] = inquiryStatusBadge(inq.status);
-    const initials = userInitials(inq.user?.name);
-    const med = inq.medicine?.name || 'General';
-    const pharm = inq.pharmacy?.name || '—';
-    const btn = inq.status === 'resolved'
-      ? `<button class="btn btn-xs" type="button" onclick="selectAdminInquiry(${inq.id})"><i class="ti ti-eye"></i> View</button>`
-      : `<button class="btn btn-xs btn-primary" type="button" onclick="selectAdminInquiry(${inq.id})"><i class="ti ti-send"></i> Reply</button>`;
+  host.innerHTML = `<div class="inquiry-history">${groups.map((group) => {
+    const rows = group.items.map((inq) => {
+          const customer = inq.user?.name || 'Customer';
+          const med = inq.medicine?.name || 'General';
+          const question = inq.message || 'No message';
+          const reply = inq.response || '';
+          const when = formatInquiryWhen(inq.updated_at || inq.created_at);
+          return `
+            <tr>
+              <td>${escapeHtml(customer)}</td>
+              <td>${escapeHtml(med)}</td>
+              <td><div class="inquiry-log-text" title="${escapeHtml(question)}">${escapeHtml(question)}</div></td>
+              <td><div class="inquiry-log-text" title="${escapeHtml(reply)}">${escapeHtml(reply)}</div></td>
+              <td class="text-sm text-muted">${escapeHtml(when)}</td>
+              <td><button class="btn btn-xs btn-danger" type="button" onclick="deleteRepliedInquiry(${inq.id})"><i class="ti ti-trash"></i> Delete</button></td>
+            </tr>`;
+        }).join('');
+
     return `
-      <tr>
-        <td>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div style="width:30px;height:30px;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--green-700);">${initials}</div>
-            ${inq.user?.name || 'Customer'}
+      <div class="card inquiry-log">
+        <div class="card-p" style="padding-bottom:0;">
+          <div class="card-header">
+            <span class="card-title"><i class="ti ti-history"></i> Replied inquiries — ${escapeHtml(group.name)}</span>
           </div>
-        </td>
-        <td>${med}</td>
-        <td>${pharm}</td>
-        <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
-        <td>${btn}</td>
-      </tr>`;
-  }).join('');
+          <p class="inquiry-log-note">Log of inquiries this pharmacy has already answered. Delete is available only after a reply.</p>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Medicine</th>
+                <th>Inquiry</th>
+                <th>Reply</th>
+                <th>Replied</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join('')}</div>`;
 }
 
 function selectAdminInquiry(id) {
@@ -1036,10 +1369,15 @@ function selectAdminInquiry(id) {
   const inq = adminInquiries.find(i => i.id === id);
   if (!inq) return;
   const med = inq.medicine?.name || 'General inquiry';
-  const pharm = inq.pharmacy?.name || 'Any pharmacy';
+  const pharm = inq.pharmacy?.name || 'Pharmacy';
   const title = document.getElementById('admin-reply-title');
   const input = document.getElementById('admin-reply-input');
-  if (title) title.innerHTML = `<i class="ti ti-message-reply"></i> Reply — ${med} · ${pharm}`;
+  const body = document.getElementById('admin-reply-body');
+  if (title) title.innerHTML = `<i class="ti ti-message-reply"></i> Reply — ${escapeHtml(med)} · ${escapeHtml(pharm)}`;
+  if (body) {
+    const customer = inq.user?.name || 'Customer';
+    body.innerHTML = `<strong>${escapeHtml(customer)}</strong> asked: ${escapeHtml(inq.message || 'No message')}`;
+  }
   if (input) input.value = inq.response || '';
   document.getElementById('admin-reply-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -1047,6 +1385,15 @@ function selectAdminInquiry(id) {
 function setReplyTemplate(text) {
   const input = document.getElementById('admin-reply-input');
   if (input) input.value = text;
+}
+
+function resetAdminReplyPanel() {
+  const title = document.getElementById('admin-reply-title');
+  const body = document.getElementById('admin-reply-body');
+  const input = document.getElementById('admin-reply-input');
+  if (title) title.innerHTML = '<i class="ti ti-message-reply"></i> Select an inquiry to reply';
+  if (body) body.textContent = "Choose an inquiry to read the customer's question.";
+  if (input) input.value = '';
 }
 
 async function sendAdminReply() {
@@ -1065,12 +1412,46 @@ async function sendAdminReply() {
       body: JSON.stringify({ response, status: 'resolved' }),
     });
     alert('Reply sent.');
-    document.getElementById('admin-reply-input').value = '';
     selectedAdminInquiryId = null;
+    resetAdminReplyPanel();
     await loadAdminInquiries();
     await loadAdminDashboard();
   } catch (err) {
     alert(err.message);
+  }
+}
+
+let repliedInquiryDeleteId = null;
+
+async function deleteRepliedInquiry(id) {
+  const numericId = Number(id);
+  if (repliedInquiryDeleteId === numericId) return;
+
+  const inq = adminInquiries.find((item) => Number(item.id) === numericId);
+  if (!inq || !inquiryIsReplied(inq)) {
+    alert('Only replied inquiries can be deleted.');
+    return;
+  }
+  const med = inq.medicine?.name || 'this inquiry';
+  const pharm = inq.pharmacy?.name || 'this pharmacy';
+  if (!window.confirm(`Delete the replied inquiry about ${med} from ${pharm}?`)) return;
+
+  repliedInquiryDeleteId = numericId;
+  try {
+    await apiFetch(`/inquiries/${numericId}`, { method: 'DELETE' });
+    adminInquiries = adminInquiries.filter((item) => Number(item.id) !== numericId);
+    if (Number(selectedAdminInquiryId) === numericId) {
+      selectedAdminInquiryId = null;
+      resetAdminReplyPanel();
+    }
+    renderAdminInquiries();
+    await loadAdminInquiries();
+    await loadAdminDashboard();
+  } catch (err) {
+    alert(err.message);
+    await loadAdminInquiries();
+  } finally {
+    repliedInquiryDeleteId = null;
   }
 }
 
@@ -1086,14 +1467,79 @@ function stockBadgeClass(status) {
   return ['badge-green', 'In stock'];
 }
 
+let adminStockRows = [];
+let lowStockSaveTimer = null;
+
+function statusForQuantity(qty, threshold) {
+  const quantity = Number(qty);
+  const limit = Number(threshold);
+  if (quantity <= 0) return 'out_of_stock';
+  if (quantity < limit) return 'low';
+  return 'available';
+}
+
 async function loadAdminStock() {
   if (!isLiveMode() || !isStaffOrAdmin()) return;
   try {
-    const rows = await apiFetch('/admin/stock');
-    renderAdminStock(rows);
+    adminStockRows = await apiFetch('/admin/stock');
+    renderAdminStock(adminStockRows);
   } catch (err) {
     console.warn('Stock load failed:', err.message);
   }
+}
+
+async function previewLowStockThreshold() {
+  const threshold = parseInt(document.getElementById('setting-low-stock-threshold')?.value, 10);
+  if (!Number.isInteger(threshold) || threshold < 1 || threshold > 1000) return;
+
+  clearTimeout(lowStockSaveTimer);
+  lowStockSaveTimer = setTimeout(() => {
+    const latest = parseInt(document.getElementById('setting-low-stock-threshold')?.value, 10);
+    if (latest === threshold) persistLowStockThreshold(threshold);
+  }, 300);
+
+  if (!adminStockRows.length && isLiveMode() && isStaffOrAdmin()) {
+    try {
+      adminStockRows = await apiFetch('/admin/stock');
+    } catch (_) {
+      adminStockRows = [];
+    }
+  }
+
+  const latest = parseInt(document.getElementById('setting-low-stock-threshold')?.value, 10);
+  if (latest !== threshold || !adminStockRows.length) return;
+
+  renderAdminStock(adminStockRows.map((row) => ({
+    ...row,
+    availability_status: statusForQuantity(row.stock_quantity, threshold),
+  })));
+}
+
+async function persistLowStockThreshold(threshold) {
+  if (!isAdminUser() || !apiToken) return;
+  const current = parseInt(adminSettings.low_stock_threshold, 10);
+  if (current === threshold) {
+    await refreshLowStockSurfaces();
+    return;
+  }
+
+  try {
+    adminSettings = await apiFetch('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ low_stock_threshold: threshold }),
+    });
+    await refreshLowStockSurfaces();
+  } catch (err) {
+    console.warn(err.message);
+  }
+}
+
+async function refreshLowStockSurfaces() {
+  await Promise.all([
+    loadAdminStock(),
+    loadAdminDashboard(),
+    reloadPublicCatalog(),
+  ]);
 }
 
 function renderAdminStock(rows) {
@@ -1108,15 +1554,105 @@ function renderAdminStock(rows) {
     const [badgeClass, badgeLabel] = stockBadgeClass(row.availability_status);
     return `
       <tr>
-        <td class="fw-500">${row.name}</td>
-        <td class="text-muted">${row.category || '—'}</td>
-        <td>${row.pharmacy}</td>
+        <td class="fw-500">${escapeHtml(row.name)}</td>
+        <td class="text-muted">${escapeHtml(row.category || '—')}</td>
+        <td>${escapeHtml(row.pharmacy)}</td>
         <td>₱${Number(row.price).toFixed(2)}</td>
         <td><div class="stock-row"><span class="stock-qty-num">${row.stock_quantity}</span><div class="stock-bar"><div class="stock-fill ${fillClass}" style="width:${width}%"></div></div></div></td>
         <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
-        <td><button class="btn btn-xs" type="button" onclick="editStockRow(${row.pharmacy_id}, ${row.medicine_id}, ${row.stock_quantity}, ${row.price})"><i class="ti ti-edit"></i></button></td>
+        <td>
+          <div style="display:flex; gap:6px; justify-content:flex-end;">
+            <button class="btn btn-xs" type="button" onclick="editStockRow(${row.pharmacy_id}, ${row.medicine_id}, ${row.stock_quantity}, ${row.price})" title="Edit"><i class="ti ti-edit"></i></button>
+            <button class="btn btn-xs btn-danger" type="button" onclick="deleteInventoryMedicine(${row.pharmacy_id}, ${row.medicine_id})" title="Delete"><i class="ti ti-trash"></i></button>
+          </div>
+        </td>
       </tr>`;
   }).join('');
+}
+
+async function addInventoryMedicine() {
+  const name = window.prompt('Medicine name');
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) {
+    alert('Enter a medicine name.');
+    return;
+  }
+
+  const priceStr = window.prompt('Price (PHP)');
+  if (priceStr === null) return;
+  const price = parseFloat(priceStr);
+  if (Number.isNaN(price) || price < 0) {
+    alert('Enter a valid price.');
+    return;
+  }
+
+  const qtyStr = window.prompt('Amount to add');
+  if (qtyStr === null) return;
+  const quantity = parseInt(qtyStr, 10);
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    alert('Enter the amount of medicine to add.');
+    return;
+  }
+
+  const body = { name: trimmed, price, quantity };
+  if (!isPharmacyScopedUser()) {
+    if (!adminPharmacies.length) {
+      try {
+        adminPharmacies = await apiFetch('/admin/pharmacies');
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
+    }
+    const pharmacyName = window.prompt('Pharmacy');
+    if (pharmacyName === null) return;
+    const match = adminPharmacies.find((pharmacy) => pharmacy.name.toLowerCase() === pharmacyName.trim().toLowerCase());
+    if (!match) {
+      alert('Enter the exact pharmacy name.');
+      return;
+    }
+    body.pharmacy_id = match.id;
+  }
+
+  try {
+    const result = await apiFetch('/admin/stock', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    await loadAdminStock();
+    await loadAdminDashboard();
+    const availability = await apiFetch('/availability');
+    if (availability.length) {
+      medicines = normalizeMedicines(availability);
+      applyMedicineFilters();
+    }
+    alert(result.added_to_existing
+      ? `${result.name} updated. Stock is now ${result.stock_quantity}.`
+      : `${result.name} added to inventory.`);
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function deleteInventoryMedicine(pharmacyId, medicineId) {
+  const row = adminStockRows.find((item) => Number(item.pharmacy_id) === Number(pharmacyId) && Number(item.medicine_id) === Number(medicineId));
+  const name = row?.name || 'this medicine';
+  const pharmacy = row?.pharmacy || 'this pharmacy';
+  if (!window.confirm(`Remove ${name} from ${pharmacy}?`)) return;
+
+  try {
+    await apiFetch(`/admin/stock/${pharmacyId}/${medicineId}`, { method: 'DELETE' });
+    await loadAdminStock();
+    await loadAdminDashboard();
+    const availability = await apiFetch('/availability');
+    if (Array.isArray(availability)) {
+      medicines = normalizeMedicines(availability);
+      applyMedicineFilters();
+    }
+  } catch (err) {
+    alert(err.message);
+  }
 }
 
 async function editStockRow(pharmacyId, medicineId, currentQty, currentPrice) {
@@ -1144,7 +1680,7 @@ async function editStockRow(pharmacyId, medicineId, currentQty, currentPrice) {
     const availability = await apiFetch('/availability');
     if (availability.length) {
       medicines = normalizeMedicines(availability);
-      renderMeds(medicines);
+      applyMedicineFilters();
     }
   } catch (err) {
     alert(err.message);
@@ -1216,7 +1752,7 @@ function renderAdminPharmacies() {
       ? '<span class="badge badge-amber">Inside TPH (hidden from users)</span>'
       : '';
     const deleteBtn = isAdmin
-      ? `<button class="btn btn-sm btn-danger" type="button" onclick="deactivatePharmacy(${p.id})" title="Deactivate"><i class="ti ti-trash"></i></button>`
+      ? `<button class="btn btn-sm btn-danger" type="button" onclick="deletePharmacy(${p.id})"><i class="ti ti-trash"></i> Delete</button>`
       : '';
 
     return `
@@ -1231,7 +1767,7 @@ function renderAdminPharmacies() {
               <div class="pharm-profile-loc">${escapeHtml(p.address || 'No address')}</div>
             </div>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
+          <div class="pharm-profile-actions">
             ${statusBadge}
             ${tphBadge}
             <button class="btn btn-sm" type="button" onclick="openPharmacyForm(${p.id})"><i class="ti ti-edit"></i> Edit</button>
@@ -1355,14 +1891,20 @@ async function savePharmacy() {
   }
 }
 
-async function deactivatePharmacy(id) {
-  if (!confirm('Deactivate this pharmacy? It will be hidden from customers.')) return;
+async function deletePharmacy(id) {
+  const pharmacy = adminPharmacies.find(p => p.id === id);
+  const name = pharmacy?.name || 'this pharmacy';
+  if (!confirm(`Delete ${name}? It will be removed from the map, along with its stock and sales. This cannot be undone.`)) return;
   try {
     await apiFetch(`/admin/pharmacies/${id}`, { method: 'DELETE' });
     closePharmacyForm();
-    await loadAdminPharmacies();
-    await refreshCustomerPharmacies();
-    await loadAdminDashboard();
+    await Promise.all([
+      loadAdminPharmacies(),
+      loadAdminGeofences(),
+      refreshCustomerPharmacies(),
+      refreshCustomerMedicines(),
+      loadAdminDashboard(),
+    ]);
   } catch (err) {
     alert(err.message);
   }
@@ -1373,7 +1915,10 @@ function geofenceZoneColor(index) {
 }
 
 function formatRadiusKm(meters) {
-  const km = meters / 1000;
+  const value = Number(meters);
+  if (!Number.isFinite(value)) return '';
+  if (value < 1000) return `${Math.round(value)} m`;
+  const km = value / 1000;
   return Number.isInteger(km) ? `${km} km` : `${km.toFixed(1)} km`;
 }
 
@@ -1386,7 +1931,7 @@ async function loadAdminGeofences() {
       apiFetch('/admin/geofences'),
       apiFetch('/admin/pharmacies'),
     ]);
-    adminGeofences = geofenceList;
+    adminGeofences = geofencesVisibleToCurrentUser(geofenceList);
     adminPharmacies = pharmacyList;
     if (!adminGeofences.find(g => g.id === selectedAdminGeofenceId)) {
       selectedAdminGeofenceId = adminGeofences.find(g => g.is_active)?.id ?? adminGeofences[0]?.id ?? null;
@@ -1406,19 +1951,36 @@ async function loadAdminGeofences() {
 
 function applyGeofenceAccessControl() {
   const isAdmin = isAdminUser();
-  const isStaff = currentUser?.role === 'staff';
+  const seesStaffScreens = isPharmacyScopedUser();
 
   document.getElementById('admin-geofence-add-btn')?.classList.toggle('hidden', !isAdmin);
-  document.getElementById('admin-geofence-assign-wrap')?.classList.toggle('hidden', !isAdmin);
-  document.getElementById('admin-geofence-staff-notice')?.classList.toggle('hidden', !isStaff);
+  document.getElementById('admin-geofence-admin-notice')?.classList.toggle('hidden', !isAdmin);
+  document.getElementById('admin-geofence-staff-notice')?.classList.toggle('hidden', !seesStaffScreens);
+  document.getElementById('admin-geofence-owner-notice')?.classList.add('hidden');
+  document.getElementById('admin-pharmacy-owner-notice')?.classList.add('hidden');
+  const staffZoneBtn = document.getElementById('staff-geofence-add-btn');
+  if (staffZoneBtn) {
+    const hasZone = staffHasPharmacyZone();
+    staffZoneBtn.disabled = false;
+    staffZoneBtn.innerHTML = hasZone
+      ? '<i class="ti ti-map-pin"></i> Update location'
+      : '<i class="ti ti-map-pin"></i> Save location';
+  }
+  fillStaffPharmacyLocation();
 
-  document.getElementById('admin-users-staff-notice')?.classList.toggle('hidden', isAdmin);
+  document.getElementById('sidebar-users')?.classList.toggle('hidden', !isAdmin);
+  document.getElementById('settings-users-card')?.classList.toggle('hidden', !isAdmin);
+  document.getElementById('admin-users-staff-notice')?.classList.toggle('hidden', true);
   document.getElementById('admin-users-panel')?.classList.toggle('hidden', !isAdmin);
+  if (!isAdmin && document.getElementById('admin-users')?.classList.contains('active')) {
+    switchAdminSection('dashboard');
+  }
   document.getElementById('admin-settings-staff-notice')?.classList.toggle('hidden', isAdmin);
   document.getElementById('setting-save-btn')?.classList.toggle('hidden', !isAdmin);
   document.getElementById('admin-settings-backup-card')?.classList.toggle('hidden', !isAdmin);
-  document.getElementById('admin-backup-staff-notice')?.classList.toggle('hidden', isAdmin);
-  document.getElementById('export-download-btn')?.classList.toggle('hidden', !isAdmin);
+  document.getElementById('admin-backup-staff-notice')?.classList.toggle('hidden', !seesStaffScreens);
+  document.getElementById('export-admin-fields')?.classList.toggle('hidden', !isAdmin);
+  document.getElementById('export-download-btn')?.classList.toggle('hidden', !(isAdmin || seesStaffScreens));
 
   if (!isAdmin) {
     closeGeofenceForm();
@@ -1430,6 +1992,161 @@ function applyGeofenceAccessControl() {
   }
 }
 
+function isHospitalGeofence(zone) {
+  return /TPH|Tarlac Provincial/i.test(String(zone?.name || ''));
+}
+
+function isStartingPoint(zone) {
+  if (!zone || Number(zone.radius_meters) === 50) return false;
+  if (zone.is_starting_point === true || zone.is_starting_point === 1 || zone.is_starting_point === '1') return true;
+  return isHospitalGeofence(zone);
+}
+
+function pointInsideGeofence(lat, lng, zone) {
+  if (lat == null || lng == null || zone?.center_latitude == null || zone?.center_longitude == null) return false;
+  return haversineKm(Number(lat), Number(lng), Number(zone.center_latitude), Number(zone.center_longitude)) * 1000
+    <= Number(zone.radius_meters);
+}
+
+function chooseStartingPoint(matches, pharmacy) {
+  if (!matches.length) return null;
+  const hospital = matches.find(isHospitalGeofence);
+  const hospitalLat = hospital?.center_latitude ?? TARLAC_CENTER.lat;
+  const hospitalLng = hospital?.center_longitude ?? TARLAC_CENTER.lng;
+  const distinct = matches.filter(zone => {
+    if (isHospitalGeofence(zone)) return false;
+    return haversineKm(Number(zone.center_latitude), Number(zone.center_longitude), hospitalLat, hospitalLng) * 1000 > 200;
+  });
+  const pool = distinct.length
+    ? distinct
+    : (hospital ? matches.filter(isHospitalGeofence) : matches);
+  pool.sort((a, b) => {
+    const radiusDiff = Number(a.radius_meters) - Number(b.radius_meters);
+    if (radiusDiff) return radiusDiff;
+    return haversineKm(pharmacy.latitude, pharmacy.longitude, a.center_latitude, a.center_longitude)
+      - haversineKm(pharmacy.latitude, pharmacy.longitude, b.center_latitude, b.center_longitude);
+  });
+  return pool[0] || null;
+}
+
+function startingPointForPharmacy(pharmacy, zones) {
+  if (!pharmacy || pharmacy.latitude == null || pharmacy.longitude == null) return null;
+  const source = zones || customerGeofences;
+  const assigned = source.filter(zone => {
+    if (!isStartingPoint(zone) || zone.is_active === false) return false;
+    return source.some(child => String(child.parent_id) === String(zone.id)
+      && (child.pharmacies || []).some(item => String(item.id) === String(pharmacy.id)));
+  });
+  const assignedPoint = chooseStartingPoint(assigned, pharmacy);
+  if (assignedPoint) return assignedPoint;
+  const matches = source.filter(zone => {
+    if (!isStartingPoint(zone) || zone.is_active === false) return false;
+    return pointInsideGeofence(pharmacy.latitude, pharmacy.longitude, zone);
+  });
+  return chooseStartingPoint(matches, pharmacy);
+}
+
+function directionsOriginFor(pharmacy) {
+  const start = startingPointForPharmacy(pharmacy);
+  if (start) {
+    return {
+      lat: Number(start.center_latitude),
+      lng: Number(start.center_longitude),
+      name: start.name,
+    };
+  }
+  return { lat: TARLAC_CENTER.lat, lng: TARLAC_CENTER.lng, name: 'Tarlac Provincial Hospital' };
+}
+
+function geofencesVisibleToCurrentUser(zones) {
+  const list = Array.isArray(zones) ? zones : [];
+  if (currentUser?.role !== 'staff' && currentUser?.role !== 'owner') return list;
+  const pharmacyId = Number(currentUser.pharmacy_id);
+  if (!pharmacyId) return [];
+  return list.filter(zone => {
+    const ids = (zone.pharmacies || []).map(p => Number(p.id));
+    if (!ids.includes(pharmacyId)) return false;
+    if (isStartingPoint(zone)) return true;
+    return ids.length === 1 && ids[0] === pharmacyId;
+  }).map(zone => {
+    if (!isStartingPoint(zone)) return zone;
+    return {
+      ...zone,
+      pharmacies: (zone.pharmacies || []).filter(p => Number(p.id) === pharmacyId),
+    };
+  });
+}
+
+function geofenceContainsZone(parent, child) {
+  if (!parent || !child || parent.id === child.id) return false;
+  if (parent.center_latitude == null || child.center_latitude == null) return false;
+  if (Number(parent.radius_meters) <= Number(child.radius_meters)) return false;
+  return haversineKm(child.center_latitude, child.center_longitude, parent.center_latitude, parent.center_longitude) * 1000
+    <= Number(parent.radius_meters);
+}
+
+function nestGeofenceZones(zones) {
+  const byId = new Map(zones.map(zone => [String(zone.id), zone]));
+  const parentById = new Map();
+  zones.forEach(zone => {
+    const parent = zone.parent_id != null ? byId.get(String(zone.parent_id)) : null;
+    if (parent && String(parent.id) !== String(zone.id)) {
+      parentById.set(String(zone.id), String(parent.id));
+    }
+  });
+
+  const childrenByParent = new Map();
+  const roots = [];
+  zones.forEach(zone => {
+    const parentId = parentById.get(String(zone.id));
+    if (parentId == null) {
+      roots.push(zone);
+      return;
+    }
+    if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+    childrenByParent.get(parentId).push(zone);
+  });
+
+  const byName = (a, b) => String(a.name).localeCompare(String(b.name));
+  roots.sort(byName);
+  childrenByParent.forEach(list => list.sort(byName));
+  return { roots, childrenByParent };
+}
+
+function geofenceFenceItem(g, nested) {
+  const colorIndex = Math.max(0, adminGeofences.findIndex(zone => zone.id === g.id));
+  const color = geofenceZoneColor(colorIndex);
+  const pharmCount = (g.pharmacies || []).length;
+  const nestedCount = adminGeofences.filter(zone => String(zone.parent_id) === String(g.id)).length;
+  const countLabel = isStartingPoint(g)
+    ? `${nestedCount} ${nestedCount === 1 ? 'geofence' : 'geofences'}`
+    : `${pharmCount} ${pharmCount === 1 ? 'pharmacy' : 'pharmacies'}`;
+  const activeClass = String(g.id) === String(selectedAdminGeofenceId) ? ' active' : '';
+  const nestedClass = nested ? ' fence-nested' : '';
+  const statusNote = g.is_active ? '' : ' · Inactive';
+  const startNote = isStartingPoint(g) ? ' · Starting point' : '';
+  const isAdmin = isAdminUser();
+  const insideBtn = isAdmin && isStartingPoint(g) && g.is_active
+    ? `<button class="btn btn-xs" type="button" onclick="event.stopPropagation(); openGeofenceInside(${g.id})" title="Add a pharmacy inside"><i class="ti ti-plus"></i></button>`
+    : '';
+  const editBtn = isAdmin
+    ? `<button class="btn btn-xs" type="button" onclick="event.stopPropagation(); openGeofenceForm(${g.id})" title="Edit"><i class="ti ti-edit"></i></button>`
+    : '';
+  const deleteBtn = isAdmin
+    ? `<button class="btn btn-xs btn-danger" type="button" onclick="event.stopPropagation(); deleteGeofence(${g.id})" title="Delete"><i class="ti ti-trash"></i></button>`
+    : '';
+
+  return `
+    <div class="fence-item${activeClass}${nestedClass}" data-geofence-id="${g.id}" onclick="selectAdminGeofence(${g.id})">
+      <div class="fence-dot" style="background:${color};"></div>
+      <div class="fence-info">
+        <div class="fence-name">${escapeHtml(g.name)}</div>
+        <div class="fence-meta">${countLabel} · ${formatRadiusKm(g.radius_meters)}${startNote}${statusNote}</div>
+      </div>
+      <div class="fence-actions">${insideBtn}${editBtn}${deleteBtn}</div>
+    </div>`;
+}
+
 function renderAdminGeofences() {
   const list = document.getElementById('admin-geofence-list');
   if (!list) return;
@@ -1439,47 +2156,18 @@ function renderAdminGeofences() {
     return;
   }
 
-  const isAdmin = isAdminUser();
-
-  list.innerHTML = adminGeofences.map((g, i) => {
-    const color = geofenceZoneColor(i);
-    const pharmCount = (g.pharmacies || []).length;
-    const activeClass = String(g.id) === String(selectedAdminGeofenceId) ? ' active' : '';
-    const statusNote = g.is_active ? '' : ' · Inactive';
-    const editBtn = isAdmin
-      ? `<button class="btn btn-xs" type="button" onclick="event.stopPropagation(); openGeofenceForm(${g.id})" title="Edit"><i class="ti ti-edit"></i></button>`
+  const { roots, childrenByParent } = nestGeofenceZones(adminGeofences);
+  const branch = (zone, nested) => {
+    const children = childrenByParent.get(String(zone.id)) || [];
+    const childHtml = children.length
+      ? `<div class="fence-children">${children.map(child => branch(child, true)).join('')}</div>`
       : '';
-    const deleteBtn = isAdmin
-      ? `<button class="btn btn-xs btn-danger" type="button" onclick="event.stopPropagation(); deactivateGeofence(${g.id})" title="Deactivate"><i class="ti ti-trash"></i></button>`
-      : '';
-
-    return `
-      <div class="fence-item${activeClass}" data-geofence-id="${g.id}" onclick="selectAdminGeofence(${g.id})">
-        <div class="fence-dot" style="background:${color};"></div>
-        <div class="fence-info">
-          <div class="fence-name">${escapeHtml(g.name)}</div>
-          <div class="fence-meta">${pharmCount} ${pharmCount === 1 ? 'pharmacy' : 'pharmacies'} · ${formatRadiusKm(g.radius_meters)}${statusNote}</div>
-        </div>
-        <div class="fence-actions">${editBtn}${deleteBtn}</div>
-      </div>`;
-  }).join('');
+    return `<div class="fence-group">${geofenceFenceItem(zone, nested)}${childHtml}</div>`;
+  };
+  list.innerHTML = roots.map(zone => branch(zone, false)).join('');
 }
 
-function fillGeofenceAssignSelects() {
-  const pharmSel = document.getElementById('admin-geofence-assign-pharmacy');
-  const zoneSel = document.getElementById('admin-geofence-assign-zone');
-  if (!pharmSel || !zoneSel) return;
-
-  const activePharmacies = adminPharmacies.filter(p => p.is_active);
-  pharmSel.innerHTML = `<option value="">Select pharmacy…</option>${activePharmacies.map(p =>
-    `<option value="${p.id}">${escapeHtml(p.name)}</option>`,
-  ).join('')}`;
-
-  const activeZones = adminGeofences.filter(g => g.is_active);
-  zoneSel.innerHTML = `<option value="">Select zone…</option>${activeZones.map(g =>
-    `<option value="${g.id}">${escapeHtml(g.name)}</option>`,
-  ).join('')}`;
-}
+function fillGeofenceAssignSelects() {}
 
 function ensureAdminGeofenceMap() {
   if (!isLiveMode() || typeof L === 'undefined') return;
@@ -1491,6 +2179,77 @@ function ensureAdminGeofenceMap() {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors',
   }).addTo(adminGeofenceMap);
+  adminGeofenceMap.on('click', (event) => {
+    const lat = event.latlng.lat;
+    const lng = event.latlng.lng;
+    if (isPharmacyScopedUser()) {
+      const latInput = document.getElementById('staff-pharmacy-lat');
+      const lngInput = document.getElementById('staff-pharmacy-lng');
+      if (latInput) latInput.value = lat.toFixed(6);
+      if (lngInput) lngInput.value = lng.toFixed(6);
+      showStaffLocationPreview(lat, lng);
+      showGeofencePinReadout(lat, lng, 'Map point');
+      return;
+    }
+    if (!isAdminUser()) return;
+    if (creatingStartingPoint()) {
+      const latInput = document.getElementById('admin-geofence-lat');
+      const lngInput = document.getElementById('admin-geofence-lng');
+      if (latInput) latInput.value = lat.toFixed(6);
+      if (lngInput) lngInput.value = lng.toFixed(6);
+      showStartingPointDraft(lat, lng);
+      showGeofencePinReadout(lat, lng, 'Starting point');
+      syncNestingLock();
+      return;
+    }
+    if (reassignQueue.length) {
+      placeReassignedPharmacy(lat, lng);
+      return;
+    }
+    if (pendingNestPharmacy && pharmacyNestParent()) {
+      placeCheckedPharmacy(lat, lng);
+      return;
+    }
+    if (pendingPharmacyName) {
+      const parent = pharmacyNestParent();
+      const holder = parent || startingPointContaining(lat, lng);
+      const readout = document.getElementById('admin-geofence-pin-readout');
+      if (!holder) {
+        if (readout) readout.textContent = 'Click inside a starting point to place this pharmacy.';
+        return;
+      }
+      if (parent && !pointInsideGeofence(lat, lng, parent)) {
+        if (readout) readout.textContent = `Click inside ${parent.name}.`;
+        return;
+      }
+      placePendingPharmacy(lat, lng);
+      return;
+    }
+    if (startingPointFormIsOpen()) {
+      const latInput = document.getElementById('admin-geofence-lat');
+      const lngInput = document.getElementById('admin-geofence-lng');
+      if (latInput) latInput.value = lat.toFixed(6);
+      if (lngInput) lngInput.value = lng.toFixed(6);
+      showStartingPointDraft(lat, lng);
+      showGeofencePinReadout(lat, lng, 'Starting point');
+      return;
+    }
+    if (geofenceFormIsOpen()) {
+      const holder = startingPointContaining(lat, lng);
+      const readout = document.getElementById('admin-geofence-pin-readout');
+      if (!holder) {
+        if (readout) readout.textContent = 'Click inside a starting point to move this pin.';
+        return;
+      }
+      const latInput = document.getElementById('admin-geofence-lat');
+      const lngInput = document.getElementById('admin-geofence-lng');
+      if (latInput) latInput.value = lat.toFixed(6);
+      if (lngInput) lngInput.value = lng.toFixed(6);
+      showGeofencePinReadout(lat, lng, `Inside ${holder.name}`);
+      return;
+    }
+    showGeofencePinReadout(lat, lng, 'Map point');
+  });
 }
 
 function clearAdminGeofenceMapLayers() {
@@ -1503,6 +2262,7 @@ function renderAdminGeofenceMapLayers() {
   clearAdminGeofenceMapLayers();
 
   const bounds = [];
+  const drawnPharmacyIds = new Set();
 
   adminGeofences.forEach((g, i) => {
     if (g.center_latitude == null || g.center_longitude == null) return;
@@ -1521,14 +2281,23 @@ function renderAdminGeofenceMapLayers() {
     bounds.push([g.center_latitude, g.center_longitude]);
 
     (g.pharmacies || []).forEach(p => {
-      if (p.latitude == null || p.longitude == null) return;
-      const marker = L.circleMarker([p.latitude, p.longitude], {
-        radius: 7,
-        color: '#fff',
-        weight: 2,
-        fillColor: color,
-        fillOpacity: p.is_active === false ? 0.45 : 1,
-      }).addTo(adminGeofenceMap).bindTooltip(p.name);
+      if (isPharmacyScopedUser() && Number(p.id) !== Number(currentUser.pharmacy_id)) return;
+      if (p.latitude == null || p.longitude == null || drawnPharmacyIds.has(p.id)) return;
+      const hasNestedZone = adminGeofences.some(zone => Number(zone.radius_meters) === 50
+        && (zone.pharmacies || []).some(item => String(item.id) === String(p.id)));
+      if (!hasNestedZone) return;
+      drawnPharmacyIds.add(p.id);
+      const marker = L.marker([p.latitude, p.longitude], {
+        icon: pharmacyPinIcon(false),
+        zIndexOffset: 400,
+      }).addTo(adminGeofenceMap);
+      marker.bindPopup(
+        `<strong>${escapeHtml(p.name)}</strong><br>Latitude: ${Number(p.latitude).toFixed(6)}<br>Longitude: ${Number(p.longitude).toFixed(6)}`,
+      );
+      marker.on('click', (event) => {
+        L.DomEvent.stopPropagation(event);
+        showGeofencePinReadout(p.latitude, p.longitude, p.name);
+      });
       adminGeofenceMapLayers.push(marker);
       bounds.push([p.latitude, p.longitude]);
     });
@@ -1542,11 +2311,155 @@ function renderAdminGeofenceMapLayers() {
     adminGeofenceMap.setView([TARLAC_CENTER.lat, TARLAC_CENTER.lng], 13);
   }
 
-  if (selectedAdminGeofenceId) {
+  if (isPharmacyScopedUser()) {
+    const hospital = [...adminGeofences]
+      .filter(isStartingPoint)
+      .sort((a, b) => Number(a.radius_meters) - Number(b.radius_meters))[0];
+    if (hospital?.center_latitude != null && hospital?.center_longitude != null) {
+      const hospitalBounds = L.circle(
+        [hospital.center_latitude, hospital.center_longitude],
+        { radius: Number(hospital.radius_meters) || 1000 },
+      ).getBounds();
+      adminGeofenceMap.fitBounds(hospitalBounds, { padding: [24, 24] });
+    } else {
+      const pharmacy = staffAssignedPharmacy();
+      if (pharmacy?.latitude != null && pharmacy?.longitude != null) {
+        adminGeofenceMap.setView([pharmacy.latitude, pharmacy.longitude], 17);
+      }
+    }
+  } else if (selectedAdminGeofenceId) {
     const g = adminGeofences.find(x => x.id === selectedAdminGeofenceId);
     if (g?.center_latitude != null && g?.center_longitude != null) {
       adminGeofenceMap.setView([g.center_latitude, g.center_longitude], 14);
     }
+  }
+
+  restoreAdminPharmacyDraftPin();
+  syncStartingPointDraft();
+}
+
+function clearStartingPointDraft() {
+  if (adminStartingDraft) {
+    adminGeofenceMap?.removeLayer(adminStartingDraft);
+    adminStartingDraft = null;
+  }
+}
+
+function showStartingPointDraft(lat, lng, options = {}) {
+  if (!adminGeofenceMap || lat == null || lng == null) return;
+  clearStartingPointDraft();
+  const radius = parseInt(document.getElementById('admin-geofence-radius')?.value, 10) || 1000;
+  const color = options.color || '#1D9E75';
+  adminStartingDraft = L.circle([Number(lat), Number(lng)], {
+    radius,
+    color,
+    weight: 2,
+    dashArray: '6,5',
+    fillColor: color,
+    fillOpacity: 0.08,
+  }).addTo(adminGeofenceMap).bindTooltip(options.label || 'New starting point');
+}
+
+function syncStartingPointDraft() {
+  const panel = document.getElementById('admin-geofence-form-panel');
+  if (!panel || panel.classList.contains('hidden')) {
+    clearStartingPointDraft();
+    return;
+  }
+  const lat = parseFloat(document.getElementById('admin-geofence-lat')?.value);
+  const lng = parseFloat(document.getElementById('admin-geofence-lng')?.value);
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    clearStartingPointDraft();
+    return;
+  }
+  if (!startingPointFormIsOpen()) {
+    clearStartingPointDraft();
+    return;
+  }
+  showStartingPointDraft(lat, lng);
+}
+
+function showGeofencePinReadout(lat, lng, label) {
+  const el = document.getElementById('admin-geofence-pin-readout');
+  if (!el) return;
+  el.textContent = `${label}: ${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}`;
+}
+
+function finalizeGeofenceName(event) {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  const nameInput = document.getElementById('admin-geofence-name');
+  const name = nameInput?.value.trim() || '';
+  if (!name) {
+    alert('Enter a zone name.');
+    return;
+  }
+  if (nameInput) nameInput.value = name;
+  const readout = document.getElementById('admin-geofence-pin-readout');
+  if (readout && startingPointFormIsOpen()) {
+    readout.textContent = `Click the map to place ${name}.`;
+  }
+  document.getElementById('admin-leaflet-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => adminGeofenceMap?.invalidateSize(), 350);
+}
+
+function clearPendingPharmacy() {
+  pendingPharmacyName = null;
+  document.getElementById('geo-add-pharmacy-btn')?.classList.remove('btn-primary');
+  if (adminPharmacyDraft) {
+    adminGeofenceMap?.removeLayer(adminPharmacyDraft);
+    adminPharmacyDraft = null;
+  }
+}
+
+function promptAddPharmacy() {
+  if (!isAdminUser()) {
+    alert('Only admins can add pharmacies.');
+    return;
+  }
+  if (creatingStartingPoint() && !startingPointCenterIsSet()) {
+    promptPlaceStartingPointFirst();
+    return;
+  }
+  if (creatingStartingPoint()) {
+    alert('Assign this starting point on the map and save it before adding a pharmacy.');
+    return;
+  }
+  const entered = window.prompt('Pharmacy name');
+  if (entered == null) return;
+  const name = entered.trim();
+  if (!name) {
+    alert('Enter a pharmacy name.');
+    return;
+  }
+  pendingPharmacyName = name;
+  document.getElementById('geo-add-pharmacy-btn')?.classList.add('btn-primary');
+  const readout = document.getElementById('admin-geofence-pin-readout');
+  const parent = pharmacyNestParent();
+  if (readout) {
+    readout.textContent = parent
+      ? `Click inside ${parent.name} to place ${name}.`
+      : `Click the map to place ${name}.`;
+  }
+  document.getElementById('admin-leaflet-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function showAdminPharmacyDraftPin(lat, lng) {
+  if (!adminGeofenceMap || lat == null || lng == null) return;
+  if (adminPharmacyDraft) {
+    adminGeofenceMap.removeLayer(adminPharmacyDraft);
+    adminPharmacyDraft = null;
+  }
+  adminPharmacyDraft = L.marker([Number(lat), Number(lng)], {
+    icon: pharmacyPinIcon(true),
+    zIndexOffset: 800,
+  }).addTo(adminGeofenceMap).bindTooltip('New pharmacy pin');
+}
+
+function restoreAdminPharmacyDraftPin() {
+  if (!pendingPharmacyName && adminPharmacyDraft) {
+    adminGeofenceMap?.removeLayer(adminPharmacyDraft);
+    adminPharmacyDraft = null;
   }
 }
 
@@ -1578,18 +2491,180 @@ function renderGeofencePharmacyChecks(selectedIds = []) {
   }
 
   wrap.innerHTML = activePharmacies.map(p => `
-    <label class="geofence-pharmacy-option">
-      <input type="checkbox" name="admin-geofence-pharmacy" value="${p.id}" ${selected.has(String(p.id)) ? 'checked' : ''} />
-      <span class="geofence-pharmacy-name">${escapeHtml(p.name)}</span>
-    </label>`).join('');
+    <div class="geofence-pharmacy-option">
+      <label>
+        <input type="checkbox" name="admin-geofence-pharmacy" value="${p.id}" ${selected.has(String(p.id)) ? 'checked' : ''} onchange="toggleAssignedPharmacy(this)" />
+        <span class="geofence-pharmacy-name">${escapeHtml(p.name)}</span>
+      </label>
+      <button class="btn btn-xs btn-danger geofence-pharmacy-remove" type="button" title="Remove" onclick="removeAssignedPharmacy(${p.id})">
+        <i class="ti ti-x"></i>
+      </button>
+    </div>`).join('');
+  ensureNestingGuard();
+  syncNestingLock();
 }
 
-function openGeofenceForm(id) {
+async function removeAssignedPharmacy(id) {
+  if (!isAdminUser()) {
+    alert('Only admins can remove pharmacies.');
+    return;
+  }
+
+  const pharmacy = adminPharmacies.find(p => String(p.id) === String(id));
+  const name = pharmacy?.name || 'this pharmacy';
+  if (!confirm(`Remove ${name} from assigned pharmacies? This clears it from the list and the map.`)) return;
+
+  const selected = getSelectedGeofencePharmacyIds().filter(selectedId => String(selectedId) !== String(id));
+
+  try {
+    await apiFetch(`/admin/pharmacies/${id}`, { method: 'DELETE' });
+    await loadAdminGeofences();
+    renderGeofencePharmacyChecks(selected);
+    await refreshCustomerPharmacies();
+    await loadAdminDashboard();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function creatingStartingPoint() {
+  const editingId = document.getElementById('admin-geofence-edit-id')?.value;
+  return startingPointFormIsOpen() && !editingId;
+}
+
+function startingPointCenterIsSet() {
+  const lat = parseFloat(document.getElementById('admin-geofence-lat')?.value);
+  const lng = parseFloat(document.getElementById('admin-geofence-lng')?.value);
+  return !Number.isNaN(lat) && !Number.isNaN(lng);
+}
+
+function promptPlaceStartingPointFirst() {
+  const name = document.getElementById('admin-geofence-name')?.value.trim();
+  const readout = document.getElementById('admin-geofence-pin-readout');
+  if (readout) {
+    readout.textContent = name
+      ? `Click the map to place ${name} before nesting a geofence.`
+      : 'Click the map to place this starting point before nesting a geofence.';
+  }
+  document.getElementById('admin-leaflet-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function syncNestingLock() {
+  const locked = creatingStartingPoint() && !startingPointCenterIsSet();
+  document.getElementById('admin-geofence-pharmacy-checks')?.classList.toggle('is-awaiting-placement', locked);
+}
+
+function ensureNestingGuard() {
+  const wrap = document.getElementById('admin-geofence-pharmacy-checks');
+  if (!wrap || wrap.dataset.guarded === '1') return;
+  wrap.dataset.guarded = '1';
+  wrap.addEventListener('mousedown', (event) => {
+    if (!creatingStartingPoint() || startingPointCenterIsSet()) return;
+    if (event.target.closest('.geofence-pharmacy-remove')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    promptPlaceStartingPointFirst();
+  }, true);
+}
+
+function pharmacyNestParent() {
+  const explicit = insideStartingPoint();
+  if (explicit) return explicit;
+  const editingId = document.getElementById('admin-geofence-edit-id')?.value;
+  const editing = editingId ? adminGeofences.find(zone => String(zone.id) === String(editingId)) : null;
+  return editing && isStartingPoint(editing) ? editing : null;
+}
+
+function insideStartingPoint() {
+  if (!insideStartingPointId) return null;
+  return adminGeofences.find(zone => String(zone.id) === String(insideStartingPointId)) || null;
+}
+
+function startingPointFormIsOpen() {
+  const panel = document.getElementById('admin-geofence-form-panel');
+  if (!panel || panel.classList.contains('hidden')) return false;
+  const editingId = document.getElementById('admin-geofence-edit-id')?.value;
+  const editing = editingId ? adminGeofences.find(zone => String(zone.id) === String(editingId)) : null;
+  return !(editing && Number(editing.radius_meters) === 50);
+}
+
+function geofenceFormIsOpen() {
+  const panel = document.getElementById('admin-geofence-form-panel');
+  return !!panel && !panel.classList.contains('hidden');
+}
+
+function startingPointContaining(lat, lng, options = {}) {
+  return adminGeofences
+    .filter(zone => (options.includeInactive || zone.is_active) && isStartingPoint(zone) && pointInsideGeofence(lat, lng, zone))
+    .sort((a, b) => Number(a.radius_meters) - Number(b.radius_meters))[0] || null;
+}
+
+function applyStartingRadiusLimits() {
+  const radiusWrap = document.getElementById('admin-geofence-radius-wrap');
+  const radiusInput = document.getElementById('admin-geofence-radius');
+  const label = document.querySelector('label[for="admin-geofence-radius"]');
+  const hint = document.getElementById('admin-geofence-radius-hint');
+  const editingId = document.getElementById('admin-geofence-edit-id')?.value;
+  const editing = editingId ? adminGeofences.find(zone => String(zone.id) === String(editingId)) : null;
+  const pinZone = editing && Number(editing.radius_meters) === 50;
+  if (radiusWrap) radiusWrap.classList.toggle('hidden', !!pinZone);
+  if (!radiusInput || pinZone) {
+    syncGeofenceFormSections();
+    return;
+  }
+
+  radiusInput.disabled = false;
+  radiusInput.min = '500';
+  radiusInput.max = '1000';
+  if (label) label.textContent = 'Radius (meters, 500–1000)';
+  const value = parseInt(radiusInput.value, 10);
+  if (Number.isNaN(value) || value < 500 || value > 1000) radiusInput.value = '1000';
+  if (hint) hint.textContent = 'This circle is the starting point. Choose 500–1,000 meters. Add Pharmacy places a pin inside it.';
+  syncGeofenceFormSections();
+}
+
+function setStartingPointField() {
+  applyStartingRadiusLimits();
+}
+
+function openGeofenceInside(parentId) {
+  const parent = adminGeofences.find(zone => String(zone.id) === String(parentId));
+  if (!parent || !isStartingPoint(parent) || !parent.is_active) {
+    alert('Choose an active starting point first.');
+    return;
+  }
+
+  closeGeofenceForm();
+  insideStartingPointId = parent.id;
+  const readout = document.getElementById('admin-geofence-pin-readout');
+  if (readout) readout.textContent = `Name the pharmacy, then click inside ${parent.name}.`;
+  if (adminGeofenceMap && parent.center_latitude != null && parent.center_longitude != null) {
+    const focus = L.circle(
+      [Number(parent.center_latitude), Number(parent.center_longitude)],
+      { radius: Number(parent.radius_meters) || 1000 },
+    ).addTo(adminGeofenceMap);
+    adminGeofenceMap.fitBounds(focus.getBounds(), { padding: [24, 24] });
+    adminGeofenceMap.removeLayer(focus);
+  }
+  promptAddPharmacy();
+  if (!pendingPharmacyName) insideStartingPointId = null;
+}
+
+function syncGeofenceFormSections() {
+  const editingId = document.getElementById('admin-geofence-edit-id')?.value;
+  const editing = editingId ? adminGeofences.find(zone => String(zone.id) === String(editingId)) : null;
+  const pinZone = editing && Number(editing.radius_meters) === 50;
+  document.getElementById('admin-geofence-pharmacies-wrap')?.classList.toggle('hidden', !!pinZone);
+}
+
+function openGeofenceForm(id, asStartingPoint = false) {
   if (!isAdminUser()) {
     alert('Only admins can create or edit geofences.');
     return;
   }
 
+  insideStartingPointId = null;
+  pendingNestPharmacy = null;
   const panel = document.getElementById('admin-geofence-form-panel');
   const title = document.getElementById('admin-geofence-form-title');
   const activeWrap = document.getElementById('admin-geofence-active-wrap');
@@ -1604,27 +2679,40 @@ function openGeofenceForm(id) {
     document.getElementById('admin-geofence-description').value = g.description || '';
     document.getElementById('admin-geofence-lat').value = g.center_latitude ?? '';
     document.getElementById('admin-geofence-lng').value = g.center_longitude ?? '';
-    document.getElementById('admin-geofence-radius').value = g.radius_meters ?? 5000;
+    const radiusInput = document.getElementById('admin-geofence-radius');
+    if (radiusInput) radiusInput.value = String(g.radius_meters ?? 1000);
     document.getElementById('admin-geofence-active').checked = !!g.is_active;
+    setStartingPointField(g, false);
     renderGeofencePharmacyChecks((g.pharmacies || []).map(p => p.id));
-    if (title) title.innerHTML = '<i class="ti ti-edit"></i> Edit geofence';
+    if (title) {
+      title.innerHTML = isStartingPoint(g)
+        ? '<i class="ti ti-edit"></i> Edit starting point'
+        : '<i class="ti ti-edit"></i> Edit geofence';
+    }
     activeWrap?.classList.remove('hidden');
     pharmaciesWrap?.classList.remove('hidden');
   } else {
     editId.value = '';
     document.getElementById('admin-geofence-name').value = '';
     document.getElementById('admin-geofence-description').value = '';
-    document.getElementById('admin-geofence-lat').value = String(TARLAC_CENTER.lat);
-    document.getElementById('admin-geofence-lng').value = String(TARLAC_CENTER.lng);
-    document.getElementById('admin-geofence-radius').value = '5000';
+    document.getElementById('admin-geofence-lat').value = '';
+    document.getElementById('admin-geofence-lng').value = '';
+    const radiusInput = document.getElementById('admin-geofence-radius');
+    if (radiusInput) radiusInput.value = '1000';
     document.getElementById('admin-geofence-active').checked = true;
+    setStartingPointField();
     renderGeofencePharmacyChecks([]);
-    if (title) title.innerHTML = '<i class="ti ti-plus"></i> Create geofence';
+    if (title) title.innerHTML = '<i class="ti ti-plus"></i> Starting point';
+    const readout = document.getElementById('admin-geofence-pin-readout');
+    if (readout) readout.textContent = 'Click the map to place this starting point. Radius is 500–1,000 meters.';
     activeWrap?.classList.add('hidden');
     pharmaciesWrap?.classList.remove('hidden');
   }
 
   panel?.classList.remove('hidden');
+  syncGeofenceFormSections();
+  syncStartingPointDraft();
+  syncNestingLock();
   panel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -1632,12 +2720,218 @@ function closeGeofenceForm() {
   document.getElementById('admin-geofence-form-panel')?.classList.add('hidden');
   const editId = document.getElementById('admin-geofence-edit-id');
   if (editId) editId.value = '';
+  insideStartingPointId = null;
+  pendingNestPharmacy = null;
+  clearPendingPharmacy();
+  clearStartingPointDraft();
+  syncNestingLock();
+}
+
+async function placePendingPharmacy(latitude, longitude) {
+  if (!isAdminUser() || !pendingPharmacyName || placePendingPharmacy.busy) return;
+  const parent = pharmacyNestParent();
+  if (!parent || !pointInsideGeofence(latitude, longitude, parent)) {
+    alert(parent
+      ? `Click inside ${parent.name}.`
+      : 'Assign this starting point on the map and save it before adding a pharmacy.');
+    return;
+  }
+  placePendingPharmacy.busy = true;
+  const name = pendingPharmacyName;
+  showAdminPharmacyDraftPin(latitude, longitude);
+  showGeofencePinReadout(latitude, longitude, name);
+
+  const selected = new Set(getSelectedGeofencePharmacyIds());
+
+  try {
+    const pharmacy = await apiFetch('/admin/pharmacies', {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        latitude,
+        longitude,
+        inside_tph: false,
+      }),
+    });
+
+    await apiFetch('/admin/geofences', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `${name} — 50 m`,
+        description: `50 meter zone around ${name}`,
+        center_latitude: latitude,
+        center_longitude: longitude,
+        radius_meters: 50,
+        pharmacy_ids: [pharmacy.id],
+        parent_id: parent.id,
+      }),
+    });
+
+    await apiFetch(`/admin/geofences/${parent.id}/pharmacies`, {
+      method: 'POST',
+      body: JSON.stringify({ pharmacy_id: pharmacy.id }),
+    });
+
+    selected.add(pharmacy.id);
+    clearPendingPharmacy();
+    if (!geofenceFormIsOpen()) insideStartingPointId = null;
+
+    await loadAdminGeofences();
+    renderGeofencePharmacyChecks([...selected]);
+    await refreshCustomerPharmacies();
+    await loadAdminDashboard();
+    showGeofencePinReadout(latitude, longitude, `${name} added`);
+  } catch (err) {
+    pendingPharmacyName = name;
+    alert(err.message);
+  } finally {
+    placePendingPharmacy.busy = false;
+  }
 }
 
 function getSelectedGeofencePharmacyIds() {
   return [...document.querySelectorAll('input[name="admin-geofence-pharmacy"]:checked')]
     .map(el => parseInt(el.value, 10))
     .filter(id => !Number.isNaN(id));
+}
+
+function pharmacyPinnedToOtherStartingPoint(pharmacyId) {
+  const editingId = document.getElementById('admin-geofence-edit-id')?.value || '';
+  const id = String(pharmacyId);
+  const onAnotherStart = adminGeofences.some(zone => isStartingPoint(zone)
+    && String(zone.id) !== String(editingId)
+    && (zone.pharmacies || []).some(pharmacy => String(pharmacy.id) === id));
+  if (onAnotherStart) return true;
+
+  const pinZone = adminGeofences.find(zone => Number(zone.radius_meters) === 50
+    && zone.parent_id
+    && String(zone.parent_id) !== String(editingId)
+    && (zone.pharmacies || []).some(pharmacy => String(pharmacy.id) === id));
+  if (pinZone) {
+    const parent = adminGeofences.find(zone => String(zone.id) === String(pinZone.parent_id));
+    if (parent && isStartingPoint(parent)) return true;
+  }
+
+  return false;
+}
+
+function pharmacyHasNestedPinHere(pharmacyId) {
+  const editingId = document.getElementById('admin-geofence-edit-id')?.value;
+  if (!editingId) return false;
+  return adminGeofences.some(zone => Number(zone.radius_meters) === 50
+    && String(zone.parent_id) === String(editingId)
+    && (zone.pharmacies || []).some(pharmacy => String(pharmacy.id) === String(pharmacyId)));
+}
+
+function checkedPharmacyNeedingPin() {
+  const editingId = document.getElementById('admin-geofence-edit-id')?.value;
+  if (!editingId) return null;
+  const editing = adminGeofences.find(zone => String(zone.id) === String(editingId));
+  if (!editing || !isStartingPoint(editing)) return null;
+  const pharmacyId = getSelectedGeofencePharmacyIds().find(id => !pharmacyHasNestedPinHere(id));
+  if (pharmacyId == null) return null;
+  const pharmacy = adminPharmacies.find(item => String(item.id) === String(pharmacyId));
+  return { id: pharmacyId, name: pharmacy?.name || 'this pharmacy' };
+}
+
+function promptNestPlacement() {
+  if (!pendingNestPharmacy) return;
+  const parent = pharmacyNestParent();
+  const readout = document.getElementById('admin-geofence-pin-readout');
+  if (readout) {
+    readout.textContent = parent
+      ? `Click inside ${parent.name} to place ${pendingNestPharmacy.name}.`
+      : `Click inside this starting point to place ${pendingNestPharmacy.name}.`;
+  }
+  document.getElementById('admin-leaflet-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function toggleAssignedPharmacy(input) {
+  if (creatingStartingPoint() && !startingPointCenterIsSet()) {
+    if (input) input.checked = false;
+    promptPlaceStartingPointFirst();
+    return;
+  }
+  if (!input?.checked) {
+    if (pendingNestPharmacy && String(pendingNestPharmacy.id) === String(input.value)) pendingNestPharmacy = null;
+    return;
+  }
+  if (pharmacyPinnedToOtherStartingPoint(input.value)) {
+    input.checked = false;
+    showStartingPointAssignmentNotice();
+    return;
+  }
+  if (pharmacyHasNestedPinHere(input.value)) return;
+  if (pendingNestPharmacy && String(pendingNestPharmacy.id) !== String(input.value)) {
+    input.checked = false;
+    promptNestPlacement();
+    return;
+  }
+  const pharmacy = adminPharmacies.find(item => String(item.id) === String(input.value));
+  pendingNestPharmacy = { id: input.value, name: pharmacy?.name || 'this pharmacy' };
+  promptNestPlacement();
+}
+
+async function placeCheckedPharmacy(latitude, longitude) {
+  const next = pendingNestPharmacy;
+  const parent = pharmacyNestParent();
+  if (!next || !parent || placeCheckedPharmacy.busy) return;
+  const readout = document.getElementById('admin-geofence-pin-readout');
+  if (!pointInsideGeofence(latitude, longitude, parent)) {
+    if (readout) readout.textContent = `Click inside ${parent.name} to place ${next.name}.`;
+    return;
+  }
+
+  placeCheckedPharmacy.busy = true;
+  const selected = new Set(getSelectedGeofencePharmacyIds());
+  selected.add(Number(next.id));
+  try {
+    await apiFetch(`/admin/pharmacies/${next.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ latitude, longitude }),
+    });
+    await apiFetch('/admin/geofences', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `${next.name} — 50 m`,
+        description: `50 meter zone around ${next.name}`,
+        center_latitude: latitude,
+        center_longitude: longitude,
+        radius_meters: 50,
+        pharmacy_ids: [Number(next.id)],
+        parent_id: parent.id,
+      }),
+    });
+    await apiFetch(`/admin/geofences/${parent.id}/pharmacies`, {
+      method: 'POST',
+      body: JSON.stringify({ pharmacy_id: Number(next.id) }),
+    });
+    pendingNestPharmacy = null;
+    await loadAdminGeofences();
+    renderGeofencePharmacyChecks([...selected]);
+    await refreshCustomerPharmacies();
+    showGeofencePinReadout(latitude, longitude, `${next.name} placed`);
+  } catch (err) {
+    alert(err.message);
+    promptNestPlacement();
+  } finally {
+    placeCheckedPharmacy.busy = false;
+  }
+}
+
+function showStartingPointAssignmentNotice() {
+  let notice = document.getElementById('starting-point-assignment-notice');
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'starting-point-assignment-notice';
+    notice.className = 'starting-point-assignment-notice';
+    notice.setAttribute('role', 'status');
+    notice.textContent = 'Already assigned to a starting point.';
+    document.body.appendChild(notice);
+  }
+  notice.classList.remove('is-fading');
+  void notice.offsetWidth;
+  notice.classList.add('is-fading');
 }
 
 async function saveGeofence() {
@@ -1652,18 +2946,29 @@ async function saveGeofence() {
   const center_latitude = parseFloat(document.getElementById('admin-geofence-lat')?.value);
   const center_longitude = parseFloat(document.getElementById('admin-geofence-lng')?.value);
   const radius_meters = parseInt(document.getElementById('admin-geofence-radius')?.value, 10);
-  const pharmacy_ids = getSelectedGeofencePharmacyIds();
+  const editing = id ? adminGeofences.find(g => String(g.id) === String(id)) : null;
+  const pinZone = editing && Number(editing.radius_meters) === 50;
 
   if (!name) {
     alert('Enter a zone name.');
     return;
   }
   if (Number.isNaN(center_latitude) || Number.isNaN(center_longitude)) {
-    alert('Enter valid center coordinates.');
+    alert('Click the map to place the center.');
     return;
   }
-  if (Number.isNaN(radius_meters) || radius_meters < 500 || radius_meters > 10000) {
-    alert('Radius must be between 500 and 10000 meters.');
+  if (!pinZone && (Number.isNaN(radius_meters) || radius_meters < 500 || radius_meters > 1000)) {
+    alert('A starting point radius must be between 500 and 1000 meters.');
+    return;
+  }
+  if (pinZone && !startingPointContaining(center_latitude, center_longitude)) {
+    alert('Click inside a starting point to move this pin.');
+    return;
+  }
+  const needsPin = checkedPharmacyNeedingPin();
+  if (needsPin) {
+    pendingNestPharmacy = needsPin;
+    promptNestPlacement();
     return;
   }
 
@@ -1672,9 +2977,13 @@ async function saveGeofence() {
     description: description || null,
     center_latitude,
     center_longitude,
-    radius_meters,
-    pharmacy_ids,
+    radius_meters: pinZone ? 50 : radius_meters,
+    is_starting_point: !pinZone,
   };
+  if (!pinZone) {
+    body.pharmacy_ids = getSelectedGeofencePharmacyIds()
+      .filter(pharmacyId => !pharmacyPinnedToOtherStartingPoint(pharmacyId));
+  }
 
   if (id) {
     body.is_active = document.getElementById('admin-geofence-active')?.checked ?? true;
@@ -1695,20 +3004,93 @@ async function saveGeofence() {
   }
 }
 
-async function deactivateGeofence(id) {
+async function deleteGeofence(id) {
   if (!isAdminUser()) {
-    alert('Only admins can deactivate geofences.');
+    alert('Only admins can delete geofences.');
     return;
   }
-  if (!confirm('Deactivate this geofence? Customers will no longer see it on the map.')) return;
+  const zone = adminGeofences.find(g => String(g.id) === String(id));
+  const name = zone?.name || 'this geofence';
+  const nested = adminGeofences.filter(child => String(child.parent_id) === String(id));
+  const confirmMessage = nested.length
+    ? `Delete ${name}? This also removes ${nested.length} nested ${nested.length === 1 ? 'geofence' : 'geofences'} from the map. Those pharmacies can be assigned to another starting point.`
+    : `Delete ${name}? This removes the zone and its pin from the map.`;
+  if (!confirm(confirmMessage)) return;
   try {
-    await apiFetch(`/admin/geofences/${id}`, { method: 'DELETE' });
+    const result = await apiFetch(`/admin/geofences/${id}`, { method: 'DELETE' });
     closeGeofenceForm();
     await loadAdminGeofences();
     await refreshCustomerPharmacies();
     await loadAdminDashboard();
+    const released = Array.isArray(result?.released) ? result.released : [];
+    if (released.length) {
+      reassignQueue = [released[0]];
+      document.getElementById('admin-leaflet-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showReassignPrompt();
+    }
   } catch (err) {
     alert(err.message);
+  }
+}
+
+function showReassignPrompt() {
+  const readout = document.getElementById('admin-geofence-pin-readout');
+  const next = reassignQueue[0];
+  if (!readout) return;
+  if (!next) {
+    readout.textContent = 'Click a pin to see its latitude and longitude.';
+    return;
+  }
+  readout.textContent = `Click inside a starting point to re-assign ${next.name}.`;
+}
+
+async function placeReassignedPharmacy(latitude, longitude) {
+  const next = reassignQueue[0];
+  if (!next || placeReassignedPharmacy.busy) return;
+  const parent = pharmacyNestParent() || startingPointContaining(latitude, longitude, { includeInactive: true });
+  const readout = document.getElementById('admin-geofence-pin-readout');
+  if (!parent || !pointInsideGeofence(latitude, longitude, parent)) {
+    if (readout) {
+      readout.textContent = parent
+        ? `Click inside ${parent.name} to re-assign ${next.name}.`
+        : `Click inside a starting point to re-assign ${next.name}.`;
+    }
+    return;
+  }
+
+  placeReassignedPharmacy.busy = true;
+  try {
+    await apiFetch(`/admin/pharmacies/${next.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ latitude, longitude }),
+    });
+    await apiFetch('/admin/geofences', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `${next.name} — 50 m`,
+        description: `50 meter zone around ${next.name}`,
+        center_latitude: latitude,
+        center_longitude: longitude,
+        radius_meters: 50,
+        pharmacy_ids: [next.id],
+        parent_id: parent.id,
+      }),
+    });
+    await apiFetch(`/admin/geofences/${parent.id}/pharmacies`, {
+      method: 'POST',
+      body: JSON.stringify({ pharmacy_id: next.id }),
+    });
+    reassignQueue.shift();
+    reassignQueue = [];
+    await loadAdminGeofences();
+    await refreshCustomerPharmacies();
+    await loadAdminDashboard();
+    showGeofencePinReadout(latitude, longitude, `${next.name} re-assigned`);
+  } catch (err) {
+    alert(err.message);
+    showReassignPrompt();
+  } finally {
+    placeReassignedPharmacy.busy = false;
   }
 }
 
@@ -1741,7 +3123,7 @@ async function assignPharmacyToGeofence() {
 }
 
 function getPosPharmacyId() {
-  if (currentUser?.role === 'staff') return currentUser.pharmacy_id;
+  if (isPharmacyScopedUser()) return currentUser.pharmacy_id;
   return posPharmacyId;
 }
 
@@ -1962,7 +3344,7 @@ async function loadAdminUsers() {
     renderAdminUsers();
   } catch (err) {
     const tbody = document.getElementById('admin-users-tbody');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-muted text-sm" style="padding:16px;">Could not load users: ${escapeHtml(err.message)}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-muted text-sm" style="padding:16px;">Could not load users: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -1971,20 +3353,64 @@ function renderAdminUsers() {
   if (!tbody) return;
 
   if (!adminUsers.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-sm" style="padding:16px;">No users found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-muted text-sm" style="padding:16px;">No users found.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = adminUsers.map(u => `
+  tbody.innerHTML = adminUsers.map(u => {
+    const lockedAdmin = u.role === 'admin' || String(u.email || '').toLowerCase() === 'admin@pharmalocate.test';
+    const active = u.is_active !== false;
+    const status = active
+      ? '<span class="badge badge-green">Active</span>'
+      : '<span class="badge badge-red">Deactivated</span>';
+    const actions = lockedAdmin
+      ? `<button class="btn btn-sm" type="button" onclick="openAdminUserForm(${u.id})">View</button>`
+      : `<div style="display:flex; gap:6px; justify-content:flex-end;">
+          <button class="btn btn-sm" type="button" onclick="openAdminUserForm(${u.id})">Edit</button>
+          <button class="btn btn-sm ${active ? 'btn-danger' : ''}" type="button" onclick="setAdminUserActive(${u.id}, ${active ? 'false' : 'true'})">${active ? 'Deactivate' : 'Activate'}</button>
+        </div>`;
+    return `
     <tr>
       <td>${escapeHtml(u.name)}</td>
       <td>${escapeHtml(u.username || '—')}</td>
       <td>${escapeHtml(u.email)}</td>
-      <td><span class="badge badge-gray">${escapeHtml(u.role)}</span></td>
+      <td><span class="badge badge-gray">${escapeHtml(accountTierLabel(u))}</span></td>
       <td>${escapeHtml(u.pharmacy || '—')}</td>
-      <td><button class="btn btn-sm" type="button" onclick="openAdminUserForm(${u.id})">Edit</button></td>
-    </tr>
-  `).join('');
+      <td>${status}</td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+function fillAdminUserPharmacySelect(selectedId) {
+  const pharmSelect = document.getElementById('admin-user-pharmacy');
+  if (!pharmSelect) return;
+  pharmSelect.innerHTML = adminPharmacies.map(p =>
+    `<option value="${p.id}">${escapeHtml(p.name)}</option>`
+  ).join('');
+  if (selectedId) pharmSelect.value = String(selectedId);
+}
+
+function openAdminUserCreate() {
+  if (!isAdminUser()) return;
+  document.getElementById('admin-user-edit-id').value = '';
+  document.getElementById('admin-user-form-title').innerHTML = '<i class="ti ti-user-plus"></i> Add user';
+  document.getElementById('admin-user-role-locked')?.classList.add('hidden');
+  document.getElementById('admin-user-fields')?.classList.remove('hidden');
+  document.getElementById('admin-user-save-btn')?.classList.remove('hidden');
+  document.getElementById('admin-user-name').value = '';
+  document.getElementById('admin-user-username').value = '';
+  document.getElementById('admin-user-email').value = '';
+  document.getElementById('admin-user-phone').value = '';
+  document.getElementById('admin-user-password').value = '';
+  const hint = document.getElementById('admin-user-password-hint');
+  if (hint) hint.textContent = 'At least 8 characters.';
+  const roleSelect = document.getElementById('admin-user-role');
+  if (roleSelect) roleSelect.value = 'customer';
+  fillAdminUserPharmacySelect();
+  toggleAdminUserPharmacyField();
+  document.getElementById('admin-user-form-panel')?.classList.remove('hidden');
+  document.getElementById('admin-user-name')?.focus();
 }
 
 function openAdminUserForm(userId) {
@@ -1993,17 +3419,26 @@ function openAdminUserForm(userId) {
   if (!user) return;
 
   document.getElementById('admin-user-edit-id').value = user.id;
-  document.getElementById('admin-user-edit-label').textContent = `${user.name} (${user.email})`;
-  document.getElementById('admin-user-role').value = user.role;
-
-  const pharmSelect = document.getElementById('admin-user-pharmacy');
-  if (pharmSelect) {
-    pharmSelect.innerHTML = adminPharmacies.map(p =>
-      `<option value="${p.id}">${escapeHtml(p.name)}</option>`
-    ).join('');
-    if (user.pharmacy_id) pharmSelect.value = String(user.pharmacy_id);
+  document.getElementById('admin-user-form-title').innerHTML = '<i class="ti ti-user-edit"></i> Edit user';
+  const lockedAdmin = user.role === 'admin' || String(user.email || '').toLowerCase() === 'admin@pharmalocate.test';
+  document.getElementById('admin-user-role-locked')?.classList.toggle('hidden', !lockedAdmin);
+  document.getElementById('admin-user-fields')?.classList.toggle('hidden', lockedAdmin);
+  document.getElementById('admin-user-save-btn')?.classList.toggle('hidden', lockedAdmin);
+  const label = document.getElementById('admin-user-edit-label');
+  if (label) label.textContent = `${user.name} (${user.email})`;
+  document.getElementById('admin-user-name').value = user.name || '';
+  document.getElementById('admin-user-username').value = user.username || '';
+  document.getElementById('admin-user-email').value = user.email || '';
+  document.getElementById('admin-user-phone').value = user.phone || '';
+  document.getElementById('admin-user-password').value = '';
+  const hint = document.getElementById('admin-user-password-hint');
+  if (hint) hint.textContent = 'Leave blank to keep the current password. A new password must be at least 8 characters.';
+  const roleSelect = document.getElementById('admin-user-role');
+  if (roleSelect) {
+    const tier = ownerTierValue(user);
+    roleSelect.value = tier || (user.role === 'staff' ? 'staff' : 'customer');
   }
-
+  fillAdminUserPharmacySelect(user.pharmacy_id);
   toggleAdminUserPharmacyField();
   document.getElementById('admin-user-form-panel')?.classList.remove('hidden');
 }
@@ -2018,24 +3453,83 @@ function toggleAdminUserPharmacyField() {
   document.getElementById('admin-user-pharmacy-wrap')?.classList.toggle('hidden', role !== 'staff');
 }
 
+function adminUserFormBody() {
+  const role = document.getElementById('admin-user-role')?.value;
+  const body = {
+    name: document.getElementById('admin-user-name')?.value.trim(),
+    username: document.getElementById('admin-user-username')?.value.trim(),
+    email: document.getElementById('admin-user-email')?.value.trim(),
+    phone: document.getElementById('admin-user-phone')?.value.trim(),
+    role,
+  };
+  const password = document.getElementById('admin-user-password')?.value || '';
+  if (password) body.password = password;
+  if (role === 'staff') body.pharmacy_id = parseInt(document.getElementById('admin-user-pharmacy')?.value, 10);
+  return body;
+}
+
 async function saveAdminUser() {
   if (!isAdminUser()) return;
 
   const userId = document.getElementById('admin-user-edit-id')?.value;
+  const creating = !userId;
+  const editing = adminUsers.find(u => String(u.id) === String(userId));
+  if (editing?.role === 'admin' || String(editing?.email || '').toLowerCase() === 'admin@pharmalocate.test') {
+    alert('The administrator account cannot be changed.');
+    return;
+  }
   const role = document.getElementById('admin-user-role')?.value;
-  const pharmacyId = document.getElementById('admin-user-pharmacy')?.value;
-
-  const body = { role };
-  if (role === 'staff') body.pharmacy_id = parseInt(pharmacyId, 10);
+  if (!['customer', 'staff', 'sparx_owner', 'magic8_owner'].includes(role)) {
+    alert('Choose Customer, Staff, SpaRx Owner, or Magic 8 Owner.');
+    return;
+  }
+  const body = adminUserFormBody();
+  if (!body.name || !body.username || !body.email) {
+    alert('Name, username, and email are required.');
+    return;
+  }
+  if (creating && !body.password) {
+    alert('Enter a password of at least 8 characters.');
+    return;
+  }
+  if (body.password && body.password.length < 8) {
+    alert('Password must be at least 8 characters.');
+    return;
+  }
 
   try {
-    await apiFetch(`/admin/users/${userId}`, {
-      method: 'PATCH',
+    await apiFetch(creating ? '/admin/users' : `/admin/users/${userId}`, {
+      method: creating ? 'POST' : 'PATCH',
       body: JSON.stringify(body),
     });
     closeAdminUserForm();
     await loadAdminUsers();
-    alert('User updated.');
+    alert(creating ? 'User added.' : 'User updated.');
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function setAdminUserActive(userId, active) {
+  if (!isAdminUser()) return;
+  const user = adminUsers.find(u => u.id === userId);
+  if (!user) return;
+  if (user.role === 'admin' || String(user.email || '').toLowerCase() === 'admin@pharmalocate.test') {
+    alert('The administrator account cannot be deactivated.');
+    return;
+  }
+  const verb = active ? 'Activate' : 'Deactivate';
+  const detail = active
+    ? `${user.name} will be able to sign in again.`
+    : `${user.name} will not be able to sign in.`;
+  if (!confirm(`${verb} ${user.name}?\n\n${detail}`)) return;
+
+  try {
+    await apiFetch(`/admin/users/${userId}/active`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: active }),
+    });
+    await loadAdminUsers();
   } catch (err) {
     alert(err.message);
   }
@@ -2074,10 +3568,12 @@ async function saveAdminSettings() {
         notification_low_stock: document.getElementById('setting-notification-low-stock')?.checked,
         notification_inquiries: document.getElementById('setting-notification-inquiries')?.checked,
         backup_schedule_enabled: document.getElementById('setting-backup-enabled')?.checked,
-        backup_schedule_time: document.getElementById('setting-backup-time')?.value || '02:00',
+        backup_schedule_time: (document.getElementById('setting-backup-time')?.value || '02:00').slice(0, 5),
       }),
     });
     updateBackupScheduleStatus();
+    clearTimeout(lowStockSaveTimer);
+    await refreshLowStockSurfaces();
     alert('Settings saved.');
   } catch (err) {
     alert(err.message);
@@ -2100,6 +3596,103 @@ function updateBackupScheduleStatus() {
   }
 }
 
+async function saveBackupSchedule() {
+  if (!isAdminUser()) {
+    alert('Only admins can save the backup schedule.');
+    return;
+  }
+
+  const time = (document.getElementById('setting-backup-time')?.value || '02:00').slice(0, 5);
+
+  try {
+    adminSettings = await apiFetch('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        backup_schedule_enabled: document.getElementById('setting-backup-enabled')?.checked,
+        backup_schedule_time: time,
+      }),
+    });
+    updateBackupScheduleStatus();
+    alert('Backup schedule saved.');
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function staffAssignedPharmacy() {
+  const pharmacyId = currentUser?.pharmacy_id;
+  if (!pharmacyId) return null;
+  return adminPharmacies.find((p) => Number(p.id) === Number(pharmacyId)) || null;
+}
+
+function staffHasPharmacyZone() {
+  const pharmacyId = currentUser?.pharmacy_id;
+  if (!pharmacyId) return false;
+  return adminGeofences.some((g) =>
+    Number(g.radius_meters) === 50
+    && (g.pharmacies || []).some((p) => Number(p.id) === Number(pharmacyId)),
+  );
+}
+
+function fillStaffPharmacyLocation() {
+  if (!isPharmacyScopedUser()) return;
+  const pharmacy = staffAssignedPharmacy();
+  const latInput = document.getElementById('staff-pharmacy-lat');
+  const lngInput = document.getElementById('staff-pharmacy-lng');
+  if (!latInput || !lngInput || !pharmacy) return;
+  if (document.activeElement === latInput || document.activeElement === lngInput) return;
+  if (pharmacy.latitude != null) latInput.value = pharmacy.latitude;
+  if (pharmacy.longitude != null) lngInput.value = pharmacy.longitude;
+}
+
+function showStaffLocationPreview(lat, lng) {
+  if (!adminGeofenceMap || typeof L === 'undefined') return;
+  if (window.staffLocationPreview) adminGeofenceMap.removeLayer(window.staffLocationPreview);
+  window.staffLocationPreview = L.circle([lat, lng], {
+    radius: 50,
+    color: '#0F6E56',
+    weight: 2,
+    dashArray: '4,4',
+    fillColor: '#1D9E75',
+    fillOpacity: 0.15,
+  }).addTo(adminGeofenceMap);
+  adminGeofenceMap.setView([lat, lng], 17);
+}
+
+async function saveStaffPharmacyLocation() {
+  if (!isPharmacyScopedUser()) return;
+  const latitude = parseFloat(document.getElementById('staff-pharmacy-lat')?.value);
+  const longitude = parseFloat(document.getElementById('staff-pharmacy-lng')?.value);
+  if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+    alert('Click the map or enter the pharmacy latitude and longitude.');
+    return;
+  }
+  if (!confirm('Save this pharmacy location with a 50 meter zone?')) return;
+
+  const btn = document.getElementById('staff-geofence-add-btn');
+  if (btn) btn.disabled = true;
+  try {
+    await apiFetch('/admin/geofences', {
+      method: 'POST',
+      body: JSON.stringify({
+        center_latitude: latitude,
+        center_longitude: longitude,
+      }),
+    });
+    if (window.staffLocationPreview && adminGeofenceMap) {
+      adminGeofenceMap.removeLayer(window.staffLocationPreview);
+      window.staffLocationPreview = null;
+    }
+    await loadAdminGeofences();
+    if (typeof reloadPublicCatalog === 'function') await reloadPublicCatalog();
+    alert('Pharmacy location saved. The zone is 50 meters around that point.');
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function loadAdminBackup() {
   applyGeofenceAccessControl();
   if (!isLiveMode() || !isStaffOrAdmin()) return;
@@ -2112,13 +3705,14 @@ async function loadAdminBackup() {
 }
 
 async function downloadAdminExport() {
-  if (!isAdminUser()) {
-    alert('Only admins can export data.');
+  const pharmacyScoped = isPharmacyScopedUser();
+  if (!isAdminUser() && !pharmacyScoped) {
+    alert('Sign in as staff or an admin to download an export.');
     return;
   }
 
-  const scope = document.getElementById('export-scope')?.value || 'full';
-  const format = document.getElementById('export-format')?.value || 'json';
+  const scope = pharmacyScoped ? 'transactions' : (document.getElementById('export-scope')?.value || 'full');
+  const format = pharmacyScoped ? 'csv' : (document.getElementById('export-format')?.value || 'csv');
   const url = `${API_BASE}/admin/export?scope=${encodeURIComponent(scope)}&format=${encodeURIComponent(format)}`;
 
   try {
@@ -2152,9 +3746,18 @@ async function refreshCustomerMedicines() {
   if (!isLiveMode()) return;
   try {
     const availability = await apiFetch('/availability');
-    medicines = normalizeMedicines(availability);
-    renderMeds(medicines);
+    medicines = normalizeMedicines(Array.isArray(availability) ? availability : []);
+    applyMedicineFilters();
+    fillMedicineSuggestions();
   } catch (_) { /* ignore */ }
+}
+
+function formatCoverageRadius(minMeters, maxMeters) {
+  const min = Number(minMeters);
+  const max = Number(maxMeters);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return 'No active zone';
+  if (min === max) return formatRadiusKm(min);
+  return `${formatRadiusKm(min)}–${formatRadiusKm(max)}`;
 }
 
 let chatbotLang = 'en';
@@ -2322,22 +3925,12 @@ function chatbotCopy() {
       subtitle: 'Mabilis na tulong sa botika, gamot, at inquiry',
       welcome: 'Pumili po ng tanong sa ibaba. Para po ito sa lahat ng user — tumulong sa botika, gamot, o inquiry sa pharmacist.',
       more: 'Iba pang tanong',
-      presets: 'Mga tanong',
-      presetsAria: 'Buksan ang mga preset na tanong',
-      zoomKicker: 'Laki ng teksto',
-      zoomIn: 'Palakihin',
-      zoomOut: 'Paliitin',
     };
   }
   return {
     subtitle: 'Quick help with pharmacies, medicines, and inquiries',
     welcome: 'Tap a question below. This help is for all users: find a community pharmacy, check medicines, or send an inquiry.',
     more: 'More questions',
-    presets: 'Preset questions',
-    presetsAria: 'Open preset questions',
-    zoomKicker: 'Text size',
-    zoomIn: 'Zoom in',
-    zoomOut: 'Zoom out',
   };
 }
 
@@ -2405,24 +3998,7 @@ function setChatbotLang(lang) {
   const copy = chatbotCopy();
   const sub = document.getElementById('chatbot-sub');
   if (sub) sub.textContent = copy.subtitle;
-  syncA11yCopy(copy);
   showChatbotMenu();
-}
-
-function syncA11yCopy(copy) {
-  const c = copy || chatbotCopy();
-  const presets = document.getElementById('preset-questions-label');
-  if (presets) presets.textContent = c.presets;
-  const presetsBtn = document.getElementById('preset-questions-toggle');
-  if (presetsBtn) presetsBtn.setAttribute('aria-label', c.presetsAria);
-  const kicker = document.getElementById('a11y-zoom-kicker');
-  if (kicker) kicker.textContent = c.zoomKicker;
-  const zoomIn = document.getElementById('a11y-zoom-in-label');
-  if (zoomIn) zoomIn.textContent = c.zoomIn;
-  const zoomOut = document.getElementById('a11y-zoom-out-label');
-  if (zoomOut) zoomOut.textContent = c.zoomOut;
-  document.getElementById('a11y-zoom-in')?.setAttribute('aria-label', c.zoomIn);
-  document.getElementById('a11y-zoom-out')?.setAttribute('aria-label', c.zoomOut);
 }
 
 function updateChatbotVisibility(view) {
@@ -2450,13 +4026,6 @@ function openChatbot() {
   }
 }
 
-function openPresetQuestions() {
-  chatbotStarted = true;
-  openChatbot();
-  showChatbotMenu();
-  document.getElementById('chatbot-choices')?.focus?.();
-}
-
 function closeChatbot() {
   const panel = document.getElementById('chatbot-panel');
   if (panel) panel.classList.remove('is-open');
@@ -2480,19 +4049,11 @@ function initChatbot() {
   const closeBtn = document.getElementById('chatbot-close');
   const langEn = document.getElementById('chatbot-lang-en');
   const langFil = document.getElementById('chatbot-lang-fil');
-  const presetsBtn = document.getElementById('preset-questions-toggle');
   if (openBtn) {
     openBtn.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
       toggleChatbot();
-    });
-  }
-  if (presetsBtn) {
-    presetsBtn.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      openPresetQuestions();
     });
   }
   if (closeBtn) {
@@ -2504,7 +4065,6 @@ function initChatbot() {
   }
   if (langEn) langEn.addEventListener('click', () => setChatbotLang('en'));
   if (langFil) langFil.addEventListener('click', () => setChatbotLang('fil'));
-  syncA11yCopy();
   updateChatbotVisibility(
     document.getElementById('view-admin')?.classList.contains('active')
       ? 'admin'
@@ -2548,14 +4108,301 @@ function initA11yZoom() {
   applyUiZoom(stored);
   document.getElementById('a11y-zoom-in')?.addEventListener('click', () => applyUiZoom(uiZoom + UI_ZOOM_STEP));
   document.getElementById('a11y-zoom-out')?.addEventListener('click', () => applyUiZoom(uiZoom - UI_ZOOM_STEP));
+  document.getElementById('setting-low-stock-threshold')?.addEventListener('input', previewLowStockThreshold);
+}
+
+const GUEST_TOUR_KEY = 'ph_guest_tour_done';
+let guideOpen = false;
+let guideFinishing = false;
+let guideSteps = [];
+let guideIndex = 0;
+let guideKind = '';
+let guideRenderToken = 0;
+
+function tourStorageKey(user = currentUser) {
+  return user?.id ? `ph_tour_done_${user.id}` : '';
+}
+
+function guideAlreadyDone() {
+  if (!currentUser) return localStorage.getItem(GUEST_TOUR_KEY) === '1';
+  if (currentUser.tour_completed_at) return true;
+  const key = tourStorageKey();
+  return Boolean(key && localStorage.getItem(key) === '1');
+}
+
+function guideStepList() {
+  if (!currentUser) {
+    return [
+      {
+        target: '#tab-pharmacies',
+        title: 'Where to find the Pharmacy Locator',
+        body: 'Open Pharmacies in the top menu. That is the locator for stores around Tarlac Provincial Hospital. You can skip this guide or continue. It appears only the first time you visit.',
+        prepare: () => switchTab('home'),
+      },
+      {
+        target: '#pharmacy-list',
+        title: 'Choose a pharmacy',
+        body: 'Click a name in this list. The selected pharmacy is highlighted, and the map moves to it.',
+        prepare: () => switchTab('pharmacies'),
+        wait: 350,
+      },
+      {
+        target: '#guest-leaflet-map',
+        title: 'Follow the map',
+        body: 'Each pin is a pharmacy. Click a pin to select that store, the same way you click a name in the list.',
+        prepare: () => switchTab('pharmacies'),
+        wait: 400,
+      },
+      {
+        target: '#pharmacy-directions-btn',
+        title: 'Get directions',
+        body: 'After you select a pharmacy, this button opens a route from the hospital area to that store.',
+        prepare: () => switchTab('pharmacies'),
+      },
+    ];
+  }
+
+  if (!isStaffOrAdmin()) {
+    return [
+      {
+        target: '#tab-home',
+        title: 'Home',
+        body: 'Home is the starting page. It introduces the locator and shows a few medicines that are currently in stock. You can skip this guide or continue. It appears only the first time you sign in.',
+        prepare: () => switchTab('home'),
+      },
+      {
+        target: '#tab-pharmacies',
+        title: 'Pharmacy Locator',
+        body: 'Pharmacies lists the stores around Tarlac Provincial Hospital. Select one, then use the map and Get directions.',
+        prepare: () => switchTab('pharmacies'),
+        wait: 350,
+      },
+      {
+        target: '#tab-medicines',
+        title: 'Medicines',
+        body: 'Medicines shows whether an item is in stock. You cannot buy from this page. SpaRx Pharmacy and Magic 8 Pharmacy keep separate counts.',
+        prepare: () => switchTab('medicines'),
+      },
+      {
+        target: '#tab-inquiries',
+        title: 'Inquiries',
+        body: 'Inquiries lets you write to one pharmacy. Choose the pharmacy, send your question, and read the reply in Your inquiries.',
+        prepare: () => switchTab('inquiries'),
+      },
+    ];
+  }
+
+  const ownPharmacy = isPharmacyScopedUser();
+  const steps = [
+    {
+      target: '#sidebar-dashboard',
+      title: 'Dashboard',
+      body: ownPharmacy
+        ? 'Dashboard summarizes your pharmacy: inquiries, stock, and today’s sales. You can skip this guide or continue. It appears only the first time you sign in.'
+        : 'Dashboard summarizes both pharmacies: inquiries, stock, and today’s sales. You can skip this guide or continue. It appears only the first time you sign in.',
+      prepare: () => switchAdminSection('dashboard'),
+    },
+    {
+      target: '#sidebar-inquiries',
+      title: 'Reply to inquiries',
+      body: ownPharmacy
+        ? 'Reply to questions sent to your pharmacy. After you reply, the message moves to the replied list, where you can delete it.'
+        : 'Reply to questions for SpaRx Pharmacy and Magic 8 Pharmacy. Replied messages are listed under each pharmacy, and you can delete them there.',
+      prepare: () => switchAdminSection('inq-mgmt'),
+    },
+    {
+      target: '#sidebar-stock',
+      title: 'Inventory management',
+      body: ownPharmacy
+        ? 'Add a medicine with its price and quantity, edit the stock, or remove it. You only change your own pharmacy.'
+        : 'Add a medicine with its price and quantity, edit the stock, or remove it. You can do this for both SpaRx Pharmacy and Magic 8 Pharmacy.',
+      prepare: () => switchAdminSection('stock'),
+    },
+    {
+      target: '#sidebar-pos',
+      title: 'POS — sales',
+      body: ownPharmacy
+        ? 'Record a sale for your pharmacy. Add items to the cart and save the sale. The stock count updates after the sale.'
+        : 'Record a sale for the pharmacy you select. Add items to the cart and save the sale. That pharmacy’s stock count updates.',
+      prepare: () => switchAdminSection('pos'),
+    },
+    {
+      target: '#sidebar-pharmacies',
+      title: 'Manage pharmacies',
+      body: ownPharmacy
+        ? 'This page shows your pharmacy. You can review its details here.'
+        : 'Add a pharmacy or edit a pharmacy’s name, address, hours, and location.',
+      prepare: () => switchAdminSection('pharmacies'),
+    },
+    {
+      target: '#sidebar-geofences',
+      title: 'Geofences',
+      body: ownPharmacy
+        ? 'View the map and save your pharmacy’s 50 meter location. Creating or editing a starting-point zone stays with the administrator.'
+        : 'Create and edit geofence zones, then place a pharmacy pin inside a starting point.',
+      prepare: () => switchAdminSection('geofences'),
+    },
+  ];
+  if (!ownPharmacy) {
+    steps.push({
+      target: '#sidebar-users',
+      title: 'User management',
+      body: 'Add a staff or customer account, edit it, or deactivate it so that person can no longer sign in. The administrator account stays locked.',
+      prepare: () => switchAdminSection('users'),
+    });
+  }
+  steps.push(
+    {
+      target: '#sidebar-settings',
+      title: 'System settings',
+      body: ownPharmacy
+        ? 'You can view the low-stock threshold and notification settings. Only an administrator can save changes.'
+        : 'Set the low-stock threshold and turn inventory and inquiry notifications on or off.',
+      prepare: () => switchAdminSection('settings'),
+    },
+    {
+      target: '#sidebar-backup',
+      title: 'Backup & export',
+      body: ownPharmacy
+        ? 'Download a spreadsheet of your pharmacy’s sales.'
+        : 'Download a copy of the system data, including sales and inventory.',
+      prepare: () => switchAdminSection('backup'),
+    },
+  );
+  return steps;
+}
+
+function maybeOfferGuide() {
+  if (guideOpen || guideAlreadyDone()) return;
+  const onAuth = document.getElementById('view-auth')?.classList.contains('active');
+  if (!currentUser && onAuth) return;
+  startGuide();
+}
+
+function startGuide() {
+  guideSteps = guideStepList();
+  guideIndex = 0;
+  guideKind = currentUser ? (isStaffOrAdmin() ? 'staff' : 'customer') : 'guest';
+  guideOpen = true;
+  guideFinishing = false;
+  document.getElementById('guide')?.classList.remove('hidden');
+  showGuideStep();
+}
+
+async function showGuideStep() {
+  const token = ++guideRenderToken;
+  while (guideIndex < guideSteps.length) {
+    const step = guideSteps[guideIndex];
+    if (typeof step.prepare === 'function') step.prepare();
+    if (step.wait) await new Promise(resolve => setTimeout(resolve, step.wait));
+    if (token !== guideRenderToken || !guideOpen) return;
+    const target = document.querySelector(step.target);
+    if (target && target.getClientRects().length) {
+      target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      const stepLabel = document.getElementById('guide-step');
+      const title = document.getElementById('guide-title');
+      const body = document.getElementById('guide-body');
+      const next = document.getElementById('guide-next');
+      if (stepLabel) stepLabel.textContent = `Step ${guideIndex + 1} of ${guideSteps.length}`;
+      if (title) title.textContent = step.title;
+      if (body) body.textContent = step.body;
+      if (next) next.textContent = guideIndex === guideSteps.length - 1 ? 'Done' : 'Continue';
+      positionGuide(target);
+      next?.focus();
+      return;
+    }
+    guideIndex += 1;
+  }
+  finishGuide();
+}
+
+function positionGuide(target) {
+  const rect = target.getBoundingClientRect();
+  const pad = 6;
+  const spot = document.getElementById('guide-spot');
+  if (spot) {
+    spot.style.top = `${Math.max(0, rect.top - pad)}px`;
+    spot.style.left = `${Math.max(0, rect.left - pad)}px`;
+    spot.style.width = `${rect.width + pad * 2}px`;
+    spot.style.height = `${rect.height + pad * 2}px`;
+  }
+  const card = document.getElementById('guide-card');
+  if (!card) return;
+  const margin = 12;
+  const width = card.offsetWidth || 320;
+  const height = card.offsetHeight || 160;
+  let left = rect.left;
+  let top = rect.bottom + margin;
+  if (rect.right < window.innerWidth * 0.55) {
+    left = rect.right + margin;
+    top = Math.max(margin, rect.top);
+  }
+  if (left + width > window.innerWidth - margin) left = window.innerWidth - width - margin;
+  if (top + height > window.innerHeight - margin) top = Math.max(margin, rect.top - height - margin);
+  if (left < margin) left = margin;
+  card.style.left = `${left}px`;
+  card.style.top = `${top}px`;
+}
+
+async function finishGuide() {
+  if (guideFinishing) return;
+  guideFinishing = true;
+  guideOpen = false;
+  guideRenderToken += 1;
+  document.getElementById('guide')?.classList.add('hidden');
+  const kind = guideKind;
+  guideSteps = [];
+  guideKind = '';
+  if (kind === 'guest') {
+    try { localStorage.setItem(GUEST_TOUR_KEY, '1'); } catch (_) { /* private mode */ }
+    guideFinishing = false;
+    return;
+  }
+  const key = tourStorageKey();
+  if (key) {
+    try { localStorage.setItem(key, '1'); } catch (_) { /* private mode */ }
+  }
+  if (currentUser) {
+    currentUser.tour_completed_at = new Date().toISOString();
+    saveSession(currentUser, apiToken);
+  }
+  if (isLiveMode() && apiToken && apiToken !== 'demo') {
+    try { await apiFetch('/tour/complete', { method: 'POST' }); } catch (_) { /* keep the local flag */ }
+  }
+  if (isStaffOrAdmin()) switchAdminSection('dashboard');
+  else switchTab('home');
+  guideFinishing = false;
+}
+
+function initGuide() {
+  document.getElementById('guide-skip')?.addEventListener('click', () => finishGuide());
+  document.getElementById('guide-next')?.addEventListener('click', () => {
+    if (!guideOpen) return;
+    guideIndex += 1;
+    if (guideIndex >= guideSteps.length) finishGuide();
+    else showGuideStep();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && guideOpen) finishGuide();
+  });
+  window.addEventListener('resize', () => {
+    if (!guideOpen) return;
+    const step = guideSteps[guideIndex];
+    const target = step ? document.querySelector(step.target) : null;
+    if (target) positionGuide(target);
+  });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    renderMeds(medicines);
+    if (!isLiveMode()) {
+      applyMedicineFilters();
+    }
     renderInquiries([]);
     initChatbot();
     initA11yZoom();
+    initGuide();
+    loadSignupTerms();
     try {
       await Promise.race([
         initLiveData(),
@@ -2568,4 +4415,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   } finally {
     revealApp();
   }
+  setTimeout(maybeOfferGuide, 280);
 });

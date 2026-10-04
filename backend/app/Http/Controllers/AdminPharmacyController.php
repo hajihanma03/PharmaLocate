@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Geofence;
 use App\Models\Pharmacy;
+use App\Models\User;
 use App\Services\Tile38Service;
+use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AdminPharmacyController extends Controller
 {
@@ -16,7 +20,7 @@ class AdminPharmacyController extends Controller
 
         $query = Pharmacy::with('geofences:id,name')->orderBy('name');
 
-        if ($user->role === 'staff') {
+        if ($user->isPharmacyScoped()) {
             if (! $user->pharmacy_id) {
                 return response()->json([]);
             }
@@ -45,7 +49,7 @@ class AdminPharmacyController extends Controller
     {
         $user = $request->user();
 
-        if ($user->role === 'staff' && $user->pharmacy_id !== $pharmacy->id) {
+        if ($user->isPharmacyScoped() && (int) $user->pharmacy_id !== (int) $pharmacy->id) {
             return response()->json(['message' => 'You can only update your assigned pharmacy.'], 403);
         }
 
@@ -55,6 +59,7 @@ class AdminPharmacyController extends Controller
 
         $pharmacy = $pharmacy->fresh()->load('geofences:id,name');
         $this->tile38->syncPharmacy($pharmacy);
+        $this->moveFiftyMeterZone($pharmacy);
 
         return response()->json($pharmacy);
     }
@@ -62,15 +67,50 @@ class AdminPharmacyController extends Controller
     public function destroy(Request $request, Pharmacy $pharmacy): JsonResponse
     {
         if ($request->user()->role !== 'admin') {
-            return response()->json(['message' => 'Only admins can deactivate pharmacies.'], 403);
+            return response()->json(['message' => 'Only admins can delete pharmacies.'], 403);
         }
 
-        $pharmacy->update(['is_active' => false]);
+        $pharmacyId = $pharmacy->id;
+        $name = $pharmacy->name;
+        $pinZones = Geofence::query()
+            ->where('radius_meters', 50)
+            ->whereHas('pharmacies', fn ($query) => $query->where('pharmacies.id', $pharmacyId))
+            ->get();
 
-        $pharmacy = $pharmacy->fresh();
-        $this->tile38->syncPharmacy($pharmacy);
+        DB::transaction(function () use ($request, $pharmacy, $pharmacyId, $name, $pinZones) {
+            foreach ($pinZones as $zone) {
+                $this->tile38->removeGeofence($zone->id);
+                $zone->delete();
+            }
+            User::where('pharmacy_id', $pharmacyId)->update(['pharmacy_id' => null]);
+            AuditLogger::log($request->user(), 'pharmacy_deleted', 'pharmacy', $pharmacyId, $name);
+            $pharmacy->delete();
+        });
 
-        return response()->json(['message' => 'Pharmacy deactivated.', 'pharmacy' => $pharmacy]);
+        $this->tile38->removePharmacy($pharmacyId);
+
+        return response()->json(['message' => $name.' was deleted.']);
+    }
+
+    private function moveFiftyMeterZone(Pharmacy $pharmacy): void
+    {
+        if ($pharmacy->latitude === null || $pharmacy->longitude === null) {
+            return;
+        }
+
+        $zones = Geofence::query()
+            ->where('radius_meters', 50)
+            ->whereHas('pharmacies', fn ($q) => $q->where('pharmacies.id', $pharmacy->id))
+            ->get();
+
+        foreach ($zones as $zone) {
+            $zone->update([
+                'center_latitude' => $pharmacy->latitude,
+                'center_longitude' => $pharmacy->longitude,
+                'radius_meters' => 50,
+            ]);
+            $this->tile38->syncGeofence($zone);
+        }
     }
 
     private function validatedPharmacy(Request $request, bool $updating = false): array

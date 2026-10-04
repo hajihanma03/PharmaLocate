@@ -85,10 +85,10 @@
 
     <!-- Auth area -->
     <div class="nav-auth" id="nav-auth">
-      <button class="btn btn-ghost btn-sm" onclick="switchView('auth')">
+      <button class="btn btn-ghost btn-sm nav-compact" onclick="switchView('auth')">
         <i class="ti ti-login"></i> Log in
       </button>
-      <button class="btn btn-primary btn-sm" onclick="switchView('auth')">
+      <button class="btn btn-primary btn-sm nav-compact" onclick="switchView('auth')">
         <i class="ti ti-user-plus"></i> Sign up
       </button>
     </div>
@@ -117,12 +117,6 @@
                 <i class="ti ti-pill"></i> Browse medicines
               </button>
             </div>
-            <div class="scope-pills" aria-label="System scope">
-              <span class="scope-pill">Users (general public)</span>
-              <span class="scope-pill">Availability</span>
-              <span class="scope-pill">Sale &amp; inventory (POS)</span>
-              <span class="scope-pill">Desktop &amp; mobile browsers</span>
-            </div>
           </div>
 
           <!-- Mini map decoration -->
@@ -148,9 +142,6 @@
               <line x1="110" y1="85" x2="130" y2="68" stroke="#1D9E75" stroke-width="1" stroke-dasharray="3,3"/>
               <line x1="110" y1="85" x2="92" y2="100" stroke="#1D9E75" stroke-width="1" stroke-dasharray="3,3"/>
             </svg>
-            <div class="hero-map-label">
-              <i class="ti ti-focus-2"></i> 5 km geofence
-            </div>
           </div>
         </div>
 
@@ -194,7 +185,7 @@
           <div class="geofence-params-title"><i class="ti ti-radar"></i> Geofencing parameters</div>
           <div class="geofence-params-grid" id="geofence-params-grid">
             <div>Shape: circular (haversine)</div>
-            <div>Default center: TPH 15.4870, 120.5960</div>
+            <div>Default center: TPH 15.4747, 120.5867</div>
             <div>Default radius: 5,000 m (5 km)</div>
             <div>Admin range: 500–10,000 m</div>
             <div>Coverage: community pharmacies around TPH</div>
@@ -212,7 +203,7 @@
               <div class="text-muted text-sm" style="padding:12px;">Loading pharmacies…</div>
             </div>
             <button class="btn btn-primary directions-btn" type="button" id="pharmacy-directions-btn" onclick="openPharmacyDirections()">
-              <i class="ti ti-navigation"></i> Get directions — I'm HERE!
+              <i class="ti ti-navigation"></i> Get directions from TPH
             </button>
           </div>
 
@@ -231,11 +222,18 @@
       <div id="tab-content-medicines" class="tab-panel hidden">
         <div class="section-hd">
           <h2><i class="ti ti-pill"></i> Medicine availability</h2>
-          <div style="display:flex; gap:8px;">
-            <input type="text" id="med-search" placeholder="Search medicine..." style="padding:7px 11px; font-size:13px; border:1px solid var(--border-md); border-radius:var(--radius-md); width:200px; background:var(--surface); color:var(--text);" oninput="filterMeds(this.value)" />
-            <select id="med-pharmacy-filter" style="padding:7px 11px; font-size:13px; border:1px solid var(--border-md); border-radius:var(--radius-md); background:var(--surface); color:var(--text);" onchange="filterMedsByPharmacy(this.value)">
+          <div class="med-toolbar">
+            <input type="text" id="med-search" placeholder="Search medicine..." oninput="filterMeds(this.value)" />
+            <select id="med-pharmacy-filter" onchange="filterMedsByPharmacy(this.value)">
               <option value="">All pharmacies</option>
             </select>
+          </div>
+        </div>
+        <div class="availability-notice" role="note">
+          <i class="ti ti-eye-check" aria-hidden="true"></i>
+          <div>
+            <strong>This page only checks if a medicine is in stock.</strong>
+            You cannot purchase here. SpaRx Pharmacy and Magic 8 Pharmacy are separate stores, so the same medicine can show two different counts. The count changes when that pharmacy’s staff updates inventory or records a sale.
           </div>
         </div>
 
@@ -256,23 +254,9 @@
             </div>
             <div class="card card-p">
               <div class="form-group">
-                <label>Medicine name</label>
-                <input type="text" id="inq-medicine" placeholder="e.g. Paracetamol 500mg" />
-              </div>
-              <div class="form-group">
-                <label>Select pharmacy</label>
-                <select id="inq-pharmacy">
-                  <option value="">Any pharmacy</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Category</label>
-                <select id="inq-category">
-                  <option>Availability check</option>
-                  <option>Medicine information</option>
-                  <option>Pricing inquiry</option>
-                  <option>Alternative medicine</option>
-                  <option>Health advice</option>
+                <label for="inq-pharmacy">Select pharmacy</label>
+                <select id="inq-pharmacy" required>
+                  <option value="">Select a pharmacy…</option>
                 </select>
               </div>
               <div class="form-group">
@@ -349,14 +333,36 @@
           <div class="form-group">
             <label for="signup-email">Email address</label>
             <input type="email" id="signup-email" name="email" autocomplete="email" placeholder="your@email.com" />
+            <p class="text-sm" style="margin:6px 0 0; color:var(--text-2);">Create account emails a 6-digit code to this address. The account is created after you enter that code.</p>
           </div>
           <div class="form-group">
             <label for="signup-password">Password</label>
             <input type="password" id="signup-password" name="password" autocomplete="new-password" placeholder="At least 8 characters" />
           </div>
-          <button class="btn btn-primary btn-full" type="submit">
+          <div class="terms-panel">
+            <div class="terms-panel-title">Terms of Service and User Agreement</div>
+            <div class="terms-scroll" id="signup-terms" tabindex="0">Loading the terms…</div>
+            <label class="terms-agree" for="signup-terms-agree">
+              <input type="checkbox" id="signup-terms-agree" onchange="syncSignupTerms()" />
+              <span>I have read and agree to the Terms of Service and User Agreement.</span>
+            </label>
+          </div>
+          <button class="btn btn-primary btn-full" type="submit" id="signup-submit-btn" disabled>
             <i class="ti ti-user-check"></i> Create account
           </button>
+          <div id="signup-verify" class="hidden" style="margin-top:14px;">
+            <p class="text-sm" id="signup-verify-note" style="margin:0 0 10px;"></p>
+            <div class="form-group">
+              <label for="signup-code">Confirmation code</label>
+              <input type="text" id="signup-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6-digit code" />
+            </div>
+            <button class="btn btn-primary btn-full" type="button" id="signup-confirm-btn" onclick="confirmSignup()">
+              <i class="ti ti-user-check"></i> Confirm and create account
+            </button>
+            <button class="btn btn-full btn-ghost" type="button" id="signup-resend-btn" style="margin-top:8px;" onclick="resendSignupCode()">
+              Resend code
+            </button>
+          </div>
         </form>
 
         <div class="auth-footer">
@@ -376,35 +382,35 @@
       <aside class="sidebar">
         <div class="sidebar-section">
           <div class="sidebar-label">Main</div>
-          <div class="sidebar-item active" onclick="switchAdminSection('dashboard')">
+          <div class="sidebar-item active" id="sidebar-dashboard" onclick="switchAdminSection('dashboard')">
             <i class="ti ti-layout-dashboard"></i> <span>Dashboard</span>
           </div>
-          <div class="sidebar-item" onclick="switchAdminSection('inq-mgmt')">
+          <div class="sidebar-item" id="sidebar-inquiries" onclick="switchAdminSection('inq-mgmt')">
             <i class="ti ti-message-question"></i> <span>Reply to inquiries</span>
             <span class="badge-count" id="admin-pending-badge">0</span>
           </div>
-          <div class="sidebar-item" onclick="switchAdminSection('stock')">
+          <div class="sidebar-item" id="sidebar-stock" onclick="switchAdminSection('stock')">
             <i class="ti ti-packages"></i> <span>Inventory management</span>
           </div>
-          <div class="sidebar-item" onclick="switchAdminSection('pos')">
+          <div class="sidebar-item" id="sidebar-pos" onclick="switchAdminSection('pos')">
             <i class="ti ti-cash-register"></i> <span>POS — sales</span>
           </div>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-label">Settings</div>
-          <div class="sidebar-item" onclick="switchAdminSection('pharmacies')">
+          <div class="sidebar-item" id="sidebar-pharmacies" onclick="switchAdminSection('pharmacies')">
             <i class="ti ti-building-store"></i> <span>Manage pharmacies</span>
           </div>
-          <div class="sidebar-item" onclick="switchAdminSection('geofences')">
+          <div class="sidebar-item" id="sidebar-geofences" onclick="switchAdminSection('geofences')">
             <i class="ti ti-map-pins"></i> <span>Geofences</span>
           </div>
-          <div class="sidebar-item" onclick="switchAdminSection('users')">
+          <div class="sidebar-item" id="sidebar-users" onclick="switchAdminSection('users')">
             <i class="ti ti-users"></i> <span>User management</span>
           </div>
-          <div class="sidebar-item" onclick="switchAdminSection('settings')">
+          <div class="sidebar-item" id="sidebar-settings" onclick="switchAdminSection('settings')">
             <i class="ti ti-settings"></i> <span>System settings</span>
           </div>
-          <div class="sidebar-item" onclick="switchAdminSection('backup')">
+          <div class="sidebar-item" id="sidebar-backup" onclick="switchAdminSection('backup')">
             <i class="ti ti-database-export"></i> <span>Backup &amp; export</span>
           </div>
         </div>
@@ -482,7 +488,7 @@
                 </div>
                 <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
                   <span style="color:var(--text-2);">Coverage radius</span>
-                  <span style="font-weight:500; color:var(--green-700);">5–10 km</span>
+                  <span style="font-weight:500; color:var(--green-700);" id="dash-coverage-radius">—</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; font-size:13px;">
                   <span style="color:var(--text-2);">GPS integration</span>
@@ -509,7 +515,7 @@
             <span class="badge badge-amber" id="admin-inq-header-badge">0 pending</span>
           </div>
 
-          <div class="card mb-16" style="overflow:hidden;">
+          <div class="card table-scroll mb-16">
             <table class="data-table">
               <thead>
                 <tr>
@@ -531,8 +537,9 @@
             <div class="card-header">
               <span class="card-title" id="admin-reply-title"><i class="ti ti-message-reply"></i> Select an inquiry to reply</span>
             </div>
-            <div style="display:flex; gap:10px;">
-              <input type="text" id="admin-reply-input" placeholder="Type your reply to the customer..." style="flex:1; padding:8px 11px; border:1px solid var(--border-md); border-radius:var(--radius-md); font-size:13px; background:var(--surface); color:var(--text);" />
+            <div id="admin-reply-body" class="text-sm text-muted" style="margin-bottom:12px;">Choose an inquiry to read the customer's question.</div>
+            <div class="reply-compose">
+              <input type="text" id="admin-reply-input" placeholder="Type your reply to the customer..." />
               <button class="btn btn-primary" type="button" id="admin-reply-send-btn" onclick="sendAdminReply()"><i class="ti ti-send"></i> Send</button>
             </div>
             <div style="display:flex; gap:7px; margin-top:10px; flex-wrap:wrap;">
@@ -541,6 +548,8 @@
               <button class="btn btn-sm btn-ghost" type="button" style="font-size:12px;" onclick="setReplyTemplate('Please visit our pharmacy for more info.')">Visit pharmacy for info</button>
             </div>
           </div>
+
+          <div id="admin-inquiry-history"></div>
         </div><!-- /admin-inq-mgmt -->
 
 
@@ -548,10 +557,10 @@
         <div class="admin-section" id="admin-stock">
           <div class="section-hd">
             <h2><i class="ti ti-packages"></i> Inventory management</h2>
-            <button class="btn btn-primary btn-sm"><i class="ti ti-plus"></i> Add medicine</button>
+            <button class="btn btn-primary btn-sm" type="button" onclick="addInventoryMedicine()"><i class="ti ti-plus"></i> Add medicine</button>
           </div>
 
-          <div class="card" style="overflow:hidden;">
+          <div class="card table-scroll">
             <table class="data-table">
               <thead>
                 <tr>
@@ -642,6 +651,10 @@
             <h2><i class="ti ti-building-store"></i> Manage pharmacies</h2>
             <button class="btn btn-primary btn-sm" type="button" id="admin-pharmacy-add-btn" onclick="openPharmacyForm()"><i class="ti ti-plus"></i> Add pharmacy</button>
           </div>
+          <div id="admin-pharmacy-owner-notice" class="geofence-notice hidden" style="margin-bottom:14px;">
+            <i class="ti ti-info-circle"></i>
+            <span>You can manage only the pharmacy assigned to this owner account.</span>
+          </div>
 
           <div id="admin-pharmacy-list">
             <div class="text-muted text-sm" style="padding:12px;">Loading pharmacies…</div>
@@ -705,13 +718,34 @@
             <button class="btn btn-primary btn-sm" type="button" id="admin-geofence-add-btn" onclick="openGeofenceForm()"><i class="ti ti-plus"></i> Create geofence</button>
           </div>
 
-          <div class="geofence-notice" style="margin-bottom:14px;">
+          <div class="geofence-notice" id="admin-geofence-admin-notice" style="margin-bottom:14px;">
             <i class="ti ti-info-circle"></i>
-            <span>Geofence is a <strong>circle</strong> in meters (500–10,000). Default center is TPH (15.4870, 120.5960), default radius 5,000 m. Does not cover pharmacies inside TPH.</span>
+            <span>Create geofence places a <strong>500–1,000 meter</strong> starting point. Add Pharmacy drops the pin inside it.</span>
+          </div>
+          <div class="geofence-notice hidden" id="admin-geofence-owner-notice" style="margin-bottom:14px;">
+            <i class="ti ti-eye"></i>
+            <span>You can view the geofences for your pharmacy. Only an administrator can add or change a geofence.</span>
           </div>
           <div class="geofence-notice hidden" id="admin-geofence-staff-notice" style="margin-bottom:14px;">
-            <i class="ti ti-eye"></i>
-            <span>Read-only view — only admins can create, edit, or assign geofence zones.</span>
+            <i class="ti ti-radar"></i>
+            <span>Click the map to place your pharmacy. The zone stays a <strong>50 meter</strong> circle around that point, and you can move it later.</span>
+            <div class="staff-location-fields">
+              <div class="form-group">
+                <label for="staff-pharmacy-lat">Latitude</label>
+                <input type="text" id="staff-pharmacy-lat" placeholder="15.4890" />
+              </div>
+              <div class="form-group">
+                <label for="staff-pharmacy-lng">Longitude</label>
+                <input type="text" id="staff-pharmacy-lng" placeholder="120.5980" />
+              </div>
+              <div class="form-group">
+                <label for="staff-pharmacy-radius">Radius (meters)</label>
+                <input type="number" id="staff-pharmacy-radius" value="50" disabled />
+              </div>
+              <button class="btn btn-primary btn-sm" type="button" id="staff-geofence-add-btn" onclick="saveStaffPharmacyLocation()">
+                <i class="ti ti-map-pin"></i> Save location
+              </button>
+            </div>
           </div>
 
           <div class="geo-admin-layout">
@@ -720,30 +754,13 @@
               <div class="map-overlay" id="admin-geofence-map-overlay">
                 <i class="ti ti-map-pins"></i> Loading map…
               </div>
+              <div id="admin-geofence-pin-readout" class="geofence-pin-readout">Click a pin to see its latitude and longitude.</div>
             </div>
 
             <div>
               <div class="text-sm fw-500 text-muted mb-12">Geofence zones</div>
               <div id="admin-geofence-list">
                 <div class="text-muted text-sm" style="padding:12px;">Loading geofences…</div>
-              </div>
-
-              <div class="divider"></div>
-              <div id="admin-geofence-assign-wrap">
-                <div class="text-sm fw-500 text-muted mb-12">Assign pharmacy to geofence</div>
-                <div class="form-group">
-                  <label for="admin-geofence-assign-pharmacy">Pharmacy</label>
-                  <select id="admin-geofence-assign-pharmacy">
-                    <option value="">Select pharmacy…</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label for="admin-geofence-assign-zone">Geofence zone</label>
-                  <select id="admin-geofence-assign-zone">
-                    <option value="">Select zone…</option>
-                  </select>
-                </div>
-                <button class="btn btn-primary btn-full btn-sm" type="button" onclick="assignPharmacyToGeofence()"><i class="ti ti-check"></i> Assign</button>
               </div>
             </div>
           </div>
@@ -755,7 +772,7 @@
             <input type="hidden" id="admin-geofence-edit-id" value="" />
             <div class="form-group">
               <label for="admin-geofence-name">Zone name</label>
-              <input type="text" id="admin-geofence-name" placeholder="e.g. Hospital Zone" />
+              <input type="text" id="admin-geofence-name" placeholder="e.g. Hospital Zone" onkeydown="finalizeGeofenceName(event)" />
             </div>
             <div class="form-group">
               <label for="admin-geofence-description">Description</label>
@@ -764,17 +781,17 @@
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
               <div class="form-group">
                 <label for="admin-geofence-lat">Center latitude</label>
-                <input type="text" id="admin-geofence-lat" placeholder="15.4870" />
+                <input type="text" id="admin-geofence-lat" placeholder="15.4747" />
               </div>
               <div class="form-group">
                 <label for="admin-geofence-lng">Center longitude</label>
-                <input type="text" id="admin-geofence-lng" placeholder="120.5960" />
+                <input type="text" id="admin-geofence-lng" placeholder="120.5867" />
               </div>
             </div>
-            <div class="form-group">
-              <label for="admin-geofence-radius">Radius (meters, 500–10000)</label>
-              <input type="number" id="admin-geofence-radius" min="500" max="10000" step="100" value="5000" />
-              <div class="text-hint text-xs mt-4">Circular coverage from the center point. Seeded zone uses 5,000 m around TPH.</div>
+            <div class="form-group" id="admin-geofence-radius-wrap">
+              <label for="admin-geofence-radius">Radius (meters, 500–1000)</label>
+              <input type="number" id="admin-geofence-radius" min="500" max="1000" step="100" value="1000" oninput="syncStartingPointDraft()" />
+              <div class="text-hint text-xs mt-4" id="admin-geofence-radius-hint">This circle is the starting point. Choose 500–1,000 meters. Add Pharmacy places a pin inside it.</div>
             </div>
             <div class="form-group hidden" id="admin-geofence-active-wrap">
               <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
@@ -783,7 +800,12 @@
               </label>
             </div>
             <div class="form-group hidden" id="admin-geofence-pharmacies-wrap">
-              <label>Assigned pharmacies</label>
+              <div class="geofence-assigned-head">
+                <label>Assigned pharmacies</label>
+                <button class="btn btn-sm" type="button" id="geo-add-pharmacy-btn" onclick="promptAddPharmacy()">
+                  <i class="ti ti-plus"></i> Add Pharmacy
+                </button>
+              </div>
               <div id="admin-geofence-pharmacy-checks" class="geofence-pharmacy-checks"></div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -798,6 +820,7 @@
         <div class="admin-section" id="admin-users">
           <div class="section-hd">
             <h2><i class="ti ti-users"></i> User management</h2>
+            <button class="btn btn-primary btn-sm" type="button" onclick="openAdminUserCreate()"><i class="ti ti-plus"></i> Add user</button>
           </div>
           <div id="admin-users-staff-notice" class="card card-p hidden" style="margin-bottom:16px; background:var(--surface-2);">
             <div class="text-sm">Only administrators can manage user accounts.</div>
@@ -812,11 +835,12 @@
                     <th>Email</th>
                     <th>Role</th>
                     <th>Pharmacy</th>
+                    <th>Status</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody id="admin-users-tbody">
-                  <tr><td colspan="6" class="text-muted text-sm" style="padding:16px;">Loading users…</td></tr>
+                  <tr><td colspan="7" class="text-muted text-sm" style="padding:16px;">Loading users…</td></tr>
                 </tbody>
               </table>
             </div>
@@ -824,27 +848,53 @@
 
           <div class="card card-p hidden" id="admin-user-form-panel" style="margin-top:16px;">
             <div class="card-header">
-              <span class="card-title"><i class="ti ti-user-edit"></i> Edit user</span>
+              <span class="card-title" id="admin-user-form-title"><i class="ti ti-user-edit"></i> Edit user</span>
             </div>
             <input type="hidden" id="admin-user-edit-id" value="" />
-            <div class="form-group">
+            <div class="form-group hidden" id="admin-user-role-locked">
               <label>Account</label>
               <div id="admin-user-edit-label" class="text-sm fw-500">—</div>
+              <p class="text-sm text-muted" style="margin-top:6px;">This is the only administrator account. It cannot be edited or deactivated.</p>
             </div>
-            <div class="form-group">
-              <label for="admin-user-role">Role</label>
-              <select id="admin-user-role" onchange="toggleAdminUserPharmacyField()">
-                <option value="customer">Customer</option>
-                <option value="staff">Staff</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div class="form-group hidden" id="admin-user-pharmacy-wrap">
-              <label for="admin-user-pharmacy">Assigned pharmacy</label>
-              <select id="admin-user-pharmacy"></select>
+            <div id="admin-user-fields">
+              <div class="form-group">
+                <label for="admin-user-name">Name</label>
+                <input type="text" id="admin-user-name" maxlength="255" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label for="admin-user-username">Username</label>
+                <input type="text" id="admin-user-username" maxlength="255" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label for="admin-user-email">Email</label>
+                <input type="email" id="admin-user-email" maxlength="255" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label for="admin-user-phone">Phone</label>
+                <input type="text" id="admin-user-phone" maxlength="30" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label for="admin-user-password">Password</label>
+                <input type="password" id="admin-user-password" autocomplete="new-password" />
+                <p class="text-sm text-muted" id="admin-user-password-hint" style="margin-top:6px;">At least 8 characters.</p>
+              </div>
+              <div class="form-group" id="admin-user-role-wrap">
+                <label for="admin-user-role">Role</label>
+                <select id="admin-user-role" onchange="toggleAdminUserPharmacyField()">
+                  <option value="customer">Customer</option>
+                  <option value="staff">Staff</option>
+                  <option value="sparx_owner">SpaRx Owner</option>
+                  <option value="magic8_owner">Magic 8 Owner</option>
+                </select>
+                <p class="text-sm text-muted" style="margin-top:6px;">Assign SpaRx Owner or Magic 8 Owner only after that person has created an account and contacted you.</p>
+              </div>
+              <div class="form-group hidden" id="admin-user-pharmacy-wrap">
+                <label for="admin-user-pharmacy">Assigned pharmacy</label>
+                <select id="admin-user-pharmacy"></select>
+              </div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn btn-primary btn-sm" type="button" onclick="saveAdminUser()"><i class="ti ti-check"></i> Save</button>
+              <button class="btn btn-primary btn-sm" type="button" id="admin-user-save-btn" onclick="saveAdminUser()"><i class="ti ti-check"></i> Save</button>
               <button class="btn btn-sm" type="button" onclick="closeAdminUserForm()">Cancel</button>
             </div>
           </div>
@@ -899,7 +949,7 @@
                 <div class="setting-desc">Assign pharmacies to geofence zones and configure boundary radius.</div>
               </div>
             </div>
-            <div class="setting-card" onclick="switchAdminSection('users')">
+            <div class="setting-card" id="settings-users-card" onclick="switchAdminSection('users')">
               <div class="setting-icon"><i class="ti ti-users"></i></div>
               <div>
                 <div class="setting-title">User management</div>
@@ -927,8 +977,11 @@
             </div>
             <div class="form-group">
               <label for="setting-backup-time">Run at (24h)</label>
-              <input type="time" id="setting-backup-time" value="02:00" />
+              <input type="time" id="setting-backup-time" value="02:00" step="60" />
             </div>
+            <button class="btn btn-primary btn-sm" type="button" id="setting-backup-save-btn" onclick="saveBackupSchedule()">
+              <i class="ti ti-device-floppy"></i> Save schedule
+            </button>
           </div>
         </div><!-- /admin-settings -->
 
@@ -939,17 +992,18 @@
             <h2><i class="ti ti-database-export"></i> Backup &amp; data export</h2>
           </div>
           <div id="admin-backup-staff-notice" class="card card-p hidden" style="margin-bottom:16px; background:var(--surface-2);">
-            <div class="text-sm">Only administrators can export system data.</div>
+            <div class="text-sm">Your download is a CSV of sales at your pharmacy only, with one row per transaction and the sale date.</div>
           </div>
           <div class="grid-2">
             <div class="card card-p">
               <div class="card-header">
                 <span class="card-title"><i class="ti ti-database"></i> Manual export</span>
               </div>
+              <div id="export-admin-fields">
               <div class="form-group">
                 <label for="export-scope">Export scope</label>
                 <select id="export-scope">
-                  <option value="full">Full system snapshot</option>
+                  <option value="full">Full snapshot (CSV is one row per sale)</option>
                   <option value="inventory">Medicine inventory only</option>
                   <option value="transactions">Transactions</option>
                   <option value="inquiries">Inquiries</option>
@@ -964,6 +1018,7 @@
                   <option value="csv">CSV spreadsheet (.csv)</option>
                 </select>
               </div>
+              </div>
               <button class="btn btn-primary btn-full" type="button" id="export-download-btn" onclick="downloadAdminExport()">
                 <i class="ti ti-download"></i> Download export
               </button>
@@ -974,8 +1029,8 @@
               <div class="backup-file">
                 <i class="ti ti-file-spreadsheet"></i>
                 <div class="backup-file-info">
-                  <div class="backup-file-name">Inventory CSV</div>
-                  <div class="backup-file-meta">Best for spreadsheet review of stock levels</div>
+                  <div class="backup-file-name">Transactions CSV</div>
+                  <div class="backup-file-meta">Date and time are separate columns. Time is Philippine time, when the sale was recorded in POS.</div>
                 </div>
               </div>
               <div class="backup-file">
@@ -1027,10 +1082,6 @@
     <div id="chatbot-choices" class="chatbot-choices"></div>
   </div>
   <div class="chatbot-docks">
-    <button type="button" id="preset-questions-toggle" class="preset-questions-toggle" aria-label="Open preset questions">
-      <i class="ti ti-list-check" aria-hidden="true"></i>
-      <span id="preset-questions-label">Preset questions</span>
-    </button>
     <button type="button" id="chatbot-toggle" class="chatbot-toggle" aria-label="Open help assistant">
       <i class="ti ti-message-chatbot"></i>
       <span>Help</span>
@@ -1045,6 +1096,20 @@
   }, 4000);
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<div id="guide" class="guide hidden" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+  <div class="guide-blocker"></div>
+  <div class="guide-spot" id="guide-spot"></div>
+  <div class="guide-card" id="guide-card">
+    <div class="guide-kicker" id="guide-step">Step 1 of 1</div>
+    <h3 id="guide-title">Guide</h3>
+    <p id="guide-body"></p>
+    <div class="guide-actions">
+      <button type="button" class="btn btn-sm" id="guide-skip">Skip</button>
+      <button type="button" class="btn btn-primary btn-sm" id="guide-next">Continue</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js" defer></script>
 </body>
 </html>

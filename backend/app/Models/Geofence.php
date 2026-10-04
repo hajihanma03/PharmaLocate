@@ -17,6 +17,8 @@ class Geofence extends Model
         'center_longitude',
         'radius_meters',
         'is_active',
+        'is_starting_point',
+        'parent_id',
     ];
 
     protected $casts = [
@@ -24,6 +26,8 @@ class Geofence extends Model
         'center_longitude' => 'float',
         'radius_meters' => 'integer',
         'is_active' => 'boolean',
+        'is_starting_point' => 'boolean',
+        'parent_id' => 'integer',
     ];
 
     public function pharmacies(): BelongsToMany

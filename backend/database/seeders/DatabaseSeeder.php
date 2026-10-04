@@ -105,8 +105,8 @@ class DatabaseSeeder extends Seeder
         $zone = Geofence::create([
             'name' => 'Tarlac Provincial Hospital Zone',
             'description' => '5km service radius around Tarlac Provincial Hospital.',
-            'center_latitude' => 15.4870,
-            'center_longitude' => 120.5960,
+            'center_latitude' => 15.47474,
+            'center_longitude' => 120.58669,
             'radius_meters' => 5000,
         ]);
         $zone->pharmacies()->attach([$sparx->id, $magic8->id]);

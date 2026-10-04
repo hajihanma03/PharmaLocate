@@ -602,7 +602,27 @@
     /* Time when inquiry was sent */
     .inq-time { font-size: 11px; color: var(--text-3); }
     /* Reply text from pharmacy */
-    .inq-reply { font-size: 12px; color: var(--text-2); margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border); }
+    .inq-reply {
+      margin-top: 10px;
+      padding: 12px 14px;
+      background: #E7F6EE;
+      border: 2px solid #085041;
+      border-radius: 10px;
+      color: #06281C;
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+    .inq-reply-label {
+      display: block;
+      margin-bottom: 4px;
+      color: #085041;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .inq-reply-text { display: block; }
 
     /* ════════════════════════════════════════════════════════════
        AUTHENTICATION VIEW: Login/Sign Up Forms
@@ -626,6 +646,36 @@
       width: 380px;
       box-shadow: var(--shadow-md);
     }
+    .terms-panel { margin: 2px 0 14px; }
+    .terms-panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .terms-scroll {
+      max-height: 168px;
+      overflow: auto;
+      padding: 10px 12px;
+      border: 1px solid var(--border-md);
+      border-radius: var(--radius-md);
+      background: var(--surface-2);
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--text-2);
+      white-space: pre-wrap;
+    }
+    .terms-agree {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .terms-agree input { margin-top: 2px; flex-shrink: 0; }
     /* Auth page header: logo and title */
     .auth-header { text-align: center; margin-bottom: 26px; }
     /* Logo icon container in auth header */

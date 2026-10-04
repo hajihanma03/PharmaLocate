@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class Setting extends Model
 {
@@ -58,14 +59,29 @@ class Setting extends Model
         return max(1, (int) static::get('low_stock_threshold', 10));
     }
 
-    public static function statusForQuantity(int $qty): string
+    public static function statusForQuantity(int $qty, ?int $threshold = null): string
     {
-        $threshold = static::lowStockThreshold();
+        $threshold ??= static::lowStockThreshold();
 
         return match (true) {
             $qty <= 0 => 'out_of_stock',
             $qty < $threshold => 'low',
             default => 'available',
         };
+    }
+
+    /**
+     * Rewrite stored stock labels so they match the current low-stock threshold.
+     */
+    public static function syncInventoryStatuses(): void
+    {
+        $threshold = static::lowStockThreshold();
+        $statusSql = "CASE WHEN stock_quantity <= 0 THEN 'out_of_stock' WHEN stock_quantity < {$threshold} THEN 'low' ELSE 'available' END";
+
+        DB::table('pharmacy_medicine')
+            ->whereRaw("availability_status <> {$statusSql}")
+            ->update([
+                'availability_status' => DB::raw($statusSql),
+            ]);
     }
 }

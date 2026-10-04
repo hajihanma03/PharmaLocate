@@ -50,7 +50,7 @@ class AdminTransactionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $pharmacyId = $user->role === 'staff'
+        $pharmacyId = $user->isPharmacyScoped()
             ? $user->pharmacy_id
             : ($request->query('pharmacy_id') ? (int) $request->query('pharmacy_id') : null);
 
@@ -89,7 +89,7 @@ class AdminTransactionController extends Controller
 
         $data = $request->validate($rules);
 
-        $pharmacyId = $user->role === 'staff'
+        $pharmacyId = $user->isPharmacyScoped()
             ? (int) $user->pharmacy_id
             : (int) $data['pharmacy_id'];
 
@@ -183,7 +183,7 @@ class AdminTransactionController extends Controller
     {
         $user = $request->user();
 
-        if ($user->role === 'staff') {
+        if ($user->isPharmacyScoped()) {
             return $user->pharmacy_id ? (int) $user->pharmacy_id : null;
         }
 
@@ -196,7 +196,7 @@ class AdminTransactionController extends Controller
     {
         $user = $request->user();
 
-        if ($user->role === 'staff' && (int) $user->pharmacy_id !== $pharmacyId) {
+        if ($user->isPharmacyScoped() && (int) $user->pharmacy_id !== $pharmacyId) {
             abort(403, 'You can only access your assigned pharmacy.');
         }
 

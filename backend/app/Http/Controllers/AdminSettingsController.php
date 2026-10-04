@@ -30,13 +30,21 @@ class AdminSettingsController extends Controller
             'notification_low_stock' => ['nullable', 'boolean'],
             'notification_inquiries' => ['nullable', 'boolean'],
             'backup_schedule_enabled' => ['nullable', 'boolean'],
-            'backup_schedule_time' => ['nullable', 'string', 'regex:/^\d{2}:\d{2}$/'],
+            'backup_schedule_time' => ['nullable', 'string', 'regex:/^\d{2}:\d{2}(:\d{2})?$/'],
         ]);
 
         foreach ($data as $key => $value) {
-            if ($value !== null) {
-                Setting::set($key, $value);
+            if ($value === null) {
+                continue;
             }
+            if ($key === 'backup_schedule_time') {
+                $value = substr((string) $value, 0, 5);
+            }
+            Setting::set($key, $value);
+        }
+
+        if (array_key_exists('low_stock_threshold', $data) && $data['low_stock_threshold'] !== null) {
+            Setting::syncInventoryStatuses();
         }
 
         AuditLogger::log($request->user(), 'settings_updated', 'settings', null, implode(', ', array_keys($data)));

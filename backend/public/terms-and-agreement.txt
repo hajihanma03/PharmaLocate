@@ -1,0 +1,72 @@
+TERMS OF SERVICE AND USER AGREEMENT
+Geofencing Pharmacy Services
+
+Last Updated: October 2, 2026
+
+IMPORTANT: Please read these terms carefully before using our pharmacy services. By using the service, you agree to these terms. If you do not agree, do not use the service.
+
+1. AGREEMENT TO THESE TERMS
+This is an agreement between you and our pharmacy (“we,” “us,” or “our”). It covers your use of our website, mobile app, and location-based pharmacy services, including geofencing features.
+
+2. WHAT OUR SERVICE DOES
+Our service helps you manage prescriptions and pharmacy needs. We may use geofencing technology, which detects when your device is near certain areas (such as our pharmacy, a delivery zone, or pickup location). This helps us send reminders, improve delivery timing, and provide nearby service alerts. You control whether location features are turned on.
+
+3. WHO CAN USE THIS SERVICE
+You must be at least 18 years old. If you are helping a family member, you confirm you have permission to manage their pharmacy information.
+
+4. YOUR ACCOUNT
+You may need an account for some features. Please provide accurate information, keep your password private, and notify us immediately if you suspect unauthorized use. We may suspend or close accounts with incorrect information or security concerns.
+
+5. PRIVACY AND INFORMATION SECURITY
+Protecting your information is a top priority.
+
+Our Promise: We will never sell, publicly share, or leak your personal information, health data, prescription details, or location information. Your data will not be posted or made available to the public.
+
+Information We Collect: We may collect your name and contact details, prescription and health information needed to serve you, location data (only if you allow it), and basic device information. We use this only to provide and improve pharmacy services.
+
+How We Protect It: We use strong security measures to help keep your information safe. If a security issue occurs, we will act promptly and notify you as required by law.
+
+When We Share Information: We do not sell your information. We may share limited data only when needed to provide the service (such as with a secure delivery partner), when required by law, or to protect safety and rights. Any partners must also protect your information.
+
+Retention and Your Rights: We keep information only as long as needed to serve you and meet legal requirements. You may ask to see, correct, or delete your information, and you may turn off location sharing at any time in your device settings.
+
+6. LOCATION FEATURES (GEOFENCING)
+By turning on location services, you allow us to use your location for pharmacy features such as delivery and reminders. You may turn location services off at any time. Some features will stop working if location is disabled, but the rest of the service remains available.
+
+7. YOUR RESPONSIBILITIES
+Please provide truthful information, keep your account secure, use the service only for lawful purposes, and do not attempt to access other accounts or misuse the service.
+
+8. OUR CONTENT
+The design, text, logos, and technology of our service belong to us or our partners. You may use the service for personal pharmacy needs but may not copy, sell, or modify our materials without permission.
+
+9. IMPORTANT NOTES
+The service is provided “as is.” Location features depend on your device and network and may not always be accurate. Our service does not replace advice from your doctor or pharmacist. Always consult a healthcare professional about your medications and health.
+
+10. LIMITS ON RESPONSIBILITY
+To the fullest extent allowed by law, we are not responsible for indirect or unexpected losses from using the service. Our total liability is limited to the amount you paid us in the past 12 months, or $100, whichever is greater.
+
+11. ENDING THE SERVICE
+You may stop using the service at any time. We may suspend or end access if you break these terms or for security or legal reasons. Privacy and liability terms continue to apply after access ends.
+
+12. CHANGES TO THESE TERMS
+We may update these terms. Important changes will be communicated through the service or by email. Continued use after changes means you accept the updated terms.
+
+13. GOVERNING LAW
+These terms are governed by the laws of the area where our pharmacy mainly operates. We will first try to resolve any disagreement through discussion.
+
+14. CONTACT US
+For questions about these terms, privacy, or your account:
+Email: privacy@[yourpharmacy].com
+Support: support@[yourpharmacy].com
+Address: [Insert Company Address]
+
+For privacy or security concerns, please write “Privacy Question” in the subject line.
+
+15. FINAL NOTES
+If any part of this agreement cannot be enforced, the rest remains in effect. This is the full agreement between you and us regarding the service. Privacy protections continue even if the business changes ownership.
+
+Thank you for trusting us with your pharmacy needs. We are committed to protecting your information and providing careful service.
+
+By using the service, you confirm you have read and agree to these terms.
+
+© 2026 Geofencing Pharmacy. All rights reserved.

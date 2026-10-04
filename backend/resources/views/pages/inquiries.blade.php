@@ -28,26 +28,12 @@
           <form method="POST" action="{{ route('inquiries.store') }}">
             @csrf
             <div class="form-group">
-              <label>Medicine name</label>
-              <input type="text" name="medicine_name" value="{{ old('medicine_name') }}" placeholder="e.g. Paracetamol 500mg" />
-            </div>
-            <div class="form-group">
               <label>Select pharmacy</label>
               <select name="pharmacy_id">
                 <option value="">Any / not sure</option>
                 @foreach ($pharmacies as $p)
                   <option value="{{ $p->id }}">{{ $p->name }}</option>
                 @endforeach
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Category</label>
-              <select name="category">
-                <option>Availability check</option>
-                <option>Medicine information</option>
-                <option>Pricing inquiry</option>
-                <option>Alternative medicine</option>
-                <option>Health advice</option>
               </select>
             </div>
             <div class="form-group">

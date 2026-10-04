@@ -6,14 +6,18 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class EnsureStaffOrAdmin
+class EnsureAccountActive
 {
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
 
-        if (! $user || ! in_array($user->role, ['admin', 'staff', 'owner'], true)) {
-            return response()->json(['message' => 'Admin or pharmacy access required.'], 403);
+        if ($user && ! $user->is_active) {
+            $user->currentAccessToken()?->delete();
+
+            return response()->json([
+                'message' => 'This account has been deactivated. Contact an administrator.',
+            ], 401);
         }
 
         return $next($request);

@@ -7,8 +7,10 @@ use App\Models\Pharmacy;
 use App\Models\Setting;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
+use App\Mail\SignupCodeMail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 /**
@@ -65,12 +67,43 @@ class Sprint7Test extends TestCase
 
     public function test_api_04_register_creates_customer(): void
     {
+        Mail::fake();
+
         $this->postJson('/api/register', [
             'name' => 'New Customer',
             'username' => 'newcust',
-            'email' => 'newcust@example.com',
+            'email' => 'newcust@gmail.com',
             'password' => 'password123',
-        ])->assertCreated();
+            'accepted_terms' => true,
+        ])->assertStatus(202);
+
+        $this->assertDatabaseMissing('users', ['email' => 'newcust@gmail.com']);
+
+        $code = null;
+        Mail::assertSent(SignupCodeMail::class, function (SignupCodeMail $mail) use (&$code) {
+            $code = $mail->code;
+
+            return $mail->hasTo('newcust@gmail.com');
+        });
+
+        $this->postJson('/api/register/confirm', [
+            'email' => 'newcust@gmail.com',
+            'code' => $code,
+        ])->assertCreated()
+            ->assertJsonPath('user.email', 'newcust@gmail.com');
+    }
+
+    public function test_register_rejects_email_that_cannot_receive_mail(): void
+    {
+        $this->postJson('/api/register', [
+            'name' => 'Nobody',
+            'username' => 'nobodybox',
+            'email' => 'nobody@no-such-inbox.invalid',
+            'password' => 'password123',
+            'accepted_terms' => true,
+        ])->assertStatus(422);
+
+        $this->assertDatabaseMissing('users', ['username' => 'nobodybox']);
     }
 
     // --- API-05, BB-03 ---
@@ -93,12 +126,16 @@ class Sprint7Test extends TestCase
         $this->assertCount(2, $response->json());
     }
 
-    public function test_api_07_pharmacies_outside_geofence_returns_empty(): void
+    public function test_api_07_pharmacies_outside_geofence_still_lists_pins(): void
     {
         $response = $this->getJson('/api/pharmacies?lat=14.5995&lng=120.9842');
 
         $response->assertOk();
-        $this->assertSame([], $response->json());
+        $this->assertCount(2, $response->json());
+        foreach ($response->json() as $pharmacy) {
+            $this->assertFalse($pharmacy['in_service_area']);
+            $this->assertNotNull($pharmacy['latitude']);
+        }
     }
 
     // --- API-08 ---
@@ -312,6 +349,18 @@ class Sprint7Test extends TestCase
         ])->assertStatus(422);
     }
 
+    public function test_wb_10_cannot_assign_admin_role(): void
+    {
+        $customer = User::where('role', 'customer')->first();
+        $headers = $this->bearer('admin');
+
+        $this->withHeaders($headers)->patchJson("/api/admin/users/{$customer->id}", [
+            'role' => 'admin',
+        ])->assertStatus(422);
+
+        $this->assertSame('customer', $customer->fresh()->role);
+    }
+
     // --- BB-24 stock update ---
 
     public function test_bb_24_admin_updates_stock_quantity(): void
@@ -346,5 +395,87 @@ class Sprint7Test extends TestCase
         foreach ($availability as $row) {
             $this->assertNotSame('TPH Compound Pharmacy', $row['pharmacy'] ?? null);
         }
+    }
+
+    public function test_full_csv_is_one_row_per_transaction_with_date(): void
+    {
+        $headers = $this->bearer('admin');
+
+        $csv = $this->withHeaders($headers)->get('/api/admin/export?scope=full&format=csv')
+            ->assertOk()
+            ->streamedContent();
+
+        $this->assertStringContainsString('date,time,transaction_id,pharmacy,staff,items,total_amount', $csv);
+        $this->assertMatchesRegularExpression('/\d{1,2}:\d{2} (AM|PM)/', $csv);
+        $this->assertDoesNotMatchRegularExpression('/\d{2}:\d{2}:\d{2}/', $csv);
+        $this->assertStringNotContainsString('stock_quantity', $csv);
+        $this->assertStringContainsString('SpaRx Pharmacy', $csv);
+    }
+
+    public function test_staff_csv_is_limited_to_their_pharmacy(): void
+    {
+        $sparx = $this->withHeaders($this->bearer('sparx_staff'))
+            ->get('/api/admin/export?scope=users&format=json')
+            ->assertOk()
+            ->streamedContent();
+
+        $this->assertStringContainsString('SpaRx Pharmacy', $sparx);
+        $this->assertStringNotContainsString('Magic 8', $sparx);
+
+        $magic = $this->withHeaders($this->bearer('magic8_staff'))
+            ->get('/api/admin/export?scope=full&format=csv')
+            ->assertOk()
+            ->streamedContent();
+
+        $this->assertStringContainsString('date,time,transaction_id', $magic);
+        $this->assertStringNotContainsString('SpaRx Pharmacy', $magic);
+    }
+
+    public function test_staff_can_add_a_50_meter_zone_around_their_pharmacy(): void
+    {
+        $headers = $this->bearer('sparx_staff');
+        $pharmacy = Pharmacy::where('name', 'SpaRx Pharmacy')->firstOrFail();
+
+        $created = $this->withHeaders($headers)->postJson('/api/admin/geofences', [])
+            ->assertCreated()
+            ->assertJsonPath('radius_meters', 50)
+            ->assertJsonPath('center_latitude', (float) $pharmacy->latitude)
+            ->assertJsonPath('center_longitude', (float) $pharmacy->longitude);
+
+        $this->assertSame($pharmacy->id, $created->json('pharmacies.0.id'));
+
+        $movedLat = 15.4912;
+        $movedLng = 120.6012;
+        $this->withHeaders($headers)->postJson('/api/admin/geofences', [
+            'center_latitude' => $movedLat,
+            'center_longitude' => $movedLng,
+        ])->assertOk()
+            ->assertJsonPath('radius_meters', 50)
+            ->assertJsonPath('center_latitude', $movedLat)
+            ->assertJsonPath('center_longitude', $movedLng);
+
+        $this->assertEqualsWithDelta($movedLat, (float) $pharmacy->fresh()->latitude, 0.00001);
+        $this->assertEqualsWithDelta($movedLng, (float) $pharmacy->fresh()->longitude, 0.00001);
+
+        $this->withHeaders($this->bearer('admin'))
+            ->postJson('/api/admin/geofences', [
+                'name' => 'Too small',
+                'center_latitude' => 15.48,
+                'center_longitude' => 120.59,
+                'radius_meters' => 50,
+            ])
+            ->assertStatus(422);
+    }
+
+    public function test_admin_can_save_backup_schedule(): void
+    {
+        $this->withHeaders($this->bearer('admin'))
+            ->patchJson('/api/admin/settings', [
+                'backup_schedule_enabled' => true,
+                'backup_schedule_time' => '03:15:00',
+            ])
+            ->assertOk()
+            ->assertJsonPath('backup_schedule_enabled', '1')
+            ->assertJsonPath('backup_schedule_time', '03:15');
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Geofence;
 use App\Models\Inquiry;
 use App\Models\Pharmacy;
+use App\Models\Setting;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -15,8 +16,10 @@ class AdminDashboardController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        Setting::syncInventoryStatuses();
+
         $user = $request->user();
-        $pharmacyId = $user->role === 'staff' ? $user->pharmacy_id : null;
+        $pharmacyId = $user->isPharmacyScoped() ? $user->pharmacy_id : null;
 
         $pharmaciesQuery = Pharmacy::where('is_active', true);
         if ($pharmacyId) {
@@ -60,6 +63,11 @@ class AdminDashboardController extends Controller
             ->limit(3)
             ->get();
 
+        $geofenceQuery = Geofence::query()->where('is_active', true);
+        if ($pharmacyId) {
+            $geofenceQuery->whereHas('pharmacies', fn ($query) => $query->where('pharmacies.id', $pharmacyId));
+        }
+
         return response()->json([
             'pharmacies_count' => $pharmaciesQuery->count(),
             'inquiries_today' => (clone $inquiriesQuery)->whereDate('created_at', today())->count(),
@@ -68,8 +76,12 @@ class AdminDashboardController extends Controller
             'low_stock_count' => (clone $stockQuery)->whereIn('pm.availability_status', ['low', 'out_of_stock'])->count(),
             'sales_today' => (float) (clone $salesQuery)->sum('total_amount'),
             'geofences' => [
-                'active' => Geofence::count(),
-                'assigned_pharmacies' => DB::table('geofence_pharmacy')->distinct('pharmacy_id')->count('pharmacy_id'),
+                'active' => (clone $geofenceQuery)->count(),
+                'assigned_pharmacies' => $pharmacyId
+                    ? 1
+                    : DB::table('geofence_pharmacy')->distinct('pharmacy_id')->count('pharmacy_id'),
+                'radius_min_meters' => (clone $geofenceQuery)->min('radius_meters'),
+                'radius_max_meters' => (clone $geofenceQuery)->max('radius_meters'),
             ],
             'users' => [
                 'registered' => User::where('role', 'customer')->count(),

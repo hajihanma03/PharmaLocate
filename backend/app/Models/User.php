@@ -12,7 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'username', 'email', 'password', 'role', 'pharmacy_id', 'phone'])]
+#[Fillable(['name', 'username', 'email', 'password', 'role', 'pharmacy_id', 'phone', 'is_active', 'email_verified_at'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -24,6 +24,8 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
+            'tour_completed_at' => 'datetime',
         ];
     }
 
@@ -35,6 +37,17 @@ class User extends Authenticatable
     public function isStaff(): bool
     {
         return $this->role === 'staff';
+    }
+
+    public function isOwner(): bool
+    {
+        return $this->role === 'owner';
+    }
+
+    /** Staff and pharmacy owners only see the pharmacy assigned to their account. */
+    public function isPharmacyScoped(): bool
+    {
+        return in_array($this->role, ['staff', 'owner'], true);
     }
 
     public function pharmacy(): BelongsTo
